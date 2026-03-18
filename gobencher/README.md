@@ -1,0 +1,84 @@
+# gobencher
+
+`gobencher` is the Go-side comparison harness for upstream Go `pslog` versus `libpslog`.
+
+It exists for two jobs:
+
+- compare the Go and C implementations on the same datasets
+- render the live elevator pitch chart that puts the Go and C variants side by side
+
+## Important Disclaimer
+
+This suite is intentionally an **attempt** at comparing the Go and C implementations. It is not a recommendation to call `libpslog` from Go in production.
+
+The primary `*C` comparison path crosses the cgo boundary once per benchmark case and uses prebuilt native `pslog_field` data. That is the closest counterpart to the Go benchmark setup because the Go side also prebuilds `Entry.Keyvals` outside the timed loop. Real Go usage of a C logger would usually cross cgo on every log call, which adds large overhead. In practice:
+
+- use the Go logger from Go
+- use the C logger from C
+
+## Prerequisite
+
+Build the release library first:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+```
+
+The cgo bridge links against `../build/release/libpslog.a`.
+It also includes the generated release header directory at `../build/release/generated/include`.
+
+## Useful Commands
+
+```sh
+go test ./...
+go test ./benchmark -run '^$' -bench . -benchmem
+go run ./cmd/elevatorpitch
+go run ./cmd/elevatorpitch -duration=3s -interval=100ms -limit=512
+```
+
+From the repository root, `./bench/run_rebaseline.sh` runs the pure C benchmark matrix first and then this Go-vs-C compare suite.
+
+If you want a fail-fast gate instead of an observational rebaseline, run:
+
+```sh
+./bench/run_perf_gate.sh
+```
+
+That script uses a fresh temporary `GOCACHE` so stale cgo objects do not make the C compare path look broken or artificially slow after header or ABI changes.
+
+The production benchmark dataset is duplicated locally from the Go `pslog` benchmark fixtures so the Go and C runners use the same input.
+
+The benchmark parsers strip source `ts` fields from that dataset. Both the Go
+and C benchmark logger constructors then regenerate timestamps from the real
+clock using the logger defaults, matching upstream `pslog` benchmark and
+elevatorpitch behavior.
+
+## Benchmark Naming
+
+- `*Go`: native Go `pslog`.
+- `*C`: primary apples-to-apples compare path using one cgo call per benchmark case and prebuilt native `pslog_field` data.
+- `*Ckvfmt`: one cgo call per benchmark case using the real C `logf` public API through generated benchmark-only cgo wrappers. On production data, static fields still go through `with()` once and only the dynamic fields use `kvfmt`.
+- `*Cffi`: Go calling into `libpslog` once per log call, so cgo boundary cost is included.
+- `*Cprepared`: Go calling prepared native C field data once per log call.
+- `*Craw`: one cgo call per benchmark case, with the hot loop and dynamic field rebuilding done inside C.
+- `jsonLiblogger`: optional JSON-only compare against `briandowns/liblogger`, available automatically when the benchmark helper library was built with `-DPSLOG_BENCHMARK_WITH_LIBLOGGER=ON`.
+
+## How To Read The Results
+
+- Treat `*C` as the headline compare path.
+- Treat `*Ckvfmt` as the honest convenience-API compare for C `logf`/`kvfmt` against Go variadic keyvals.
+- Treat `*Cffi` as a diagnostic showing why per-call cgo is not a meaningful deployment model for logger-core comparison.
+- Treat `*Craw` as a diagnostic for C-side rebuilding semantics with the cgo cost paid once per benchmark case.
+- Treat `jsonLiblogger` as a benchmark-only JSON comparison with different semantics: Unix-seconds timestamps, no `with()`, no color path, and no native boolean field type.
+
+## Elevator Pitch
+
+`go run ./cmd/elevatorpitch` renders the live comparison chart. The default bar set compares:
+
+- `jsonGo` / `jsonC`
+- `coljsonGo` / `coljsonC`
+- `consoleGo` / `consoleC`
+- `colconGo` / `colconC`
+
+If the optional `liblogger` helper was built, `jsonLiblogger` is included automatically.

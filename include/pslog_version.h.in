@@ -1,0 +1,13 @@
+#ifndef PSLOG_VERSION_H
+#define PSLOG_VERSION_H
+
+/** Major component of the libpslog semantic version. */
+#define PSLOG_VERSION_MAJOR @PSLOG_VERSION_MAJOR@
+/** Minor component of the libpslog semantic version. */
+#define PSLOG_VERSION_MINOR @PSLOG_VERSION_MINOR@
+/** Patch component of the libpslog semantic version. */
+#define PSLOG_VERSION_PATCH @PSLOG_VERSION_PATCH@
+/** Human-readable libpslog semantic version string. */
+#define PSLOG_VERSION_STRING "@PSLOG_RESOLVED_VERSION@"
+
+#endif
