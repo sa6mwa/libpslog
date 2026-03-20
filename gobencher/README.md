@@ -35,6 +35,7 @@ go test ./...
 go test ./benchmark -run '^$' -bench . -benchmem
 go run ./cmd/elevatorpitch
 go run ./cmd/elevatorpitch -duration=3s -interval=100ms -limit=512
+go run ./cmd/elevatorpitch -include-quill
 ```
 
 From the repository root, `./bench/run_rebaseline.sh` runs the pure C benchmark matrix first and then this Go-vs-C compare suite.
@@ -63,6 +64,7 @@ elevatorpitch behavior.
 - `*Cprepared`: Go calling prepared native C field data once per log call.
 - `*Craw`: one cgo call per benchmark case, with the hot loop and dynamic field rebuilding done inside C.
 - `jsonLiblogger`: optional JSON-only compare against `briandowns/liblogger`, available automatically when the benchmark helper library was built with `-DPSLOG_BENCHMARK_WITH_LIBLOGGER=ON`.
+- `jsonQuill`: optional JSON-only compare against Quill, available automatically when the benchmark helper library was built with `-DPSLOG_BENCHMARK_WITH_QUILL=ON`.
 
 ## How To Read The Results
 
@@ -70,7 +72,8 @@ elevatorpitch behavior.
 - Treat `*Ckvfmt` as the honest convenience-API compare for C `logf`/`kvfmt` against Go variadic keyvals.
 - Treat `*Cffi` as a diagnostic showing why per-call cgo is not a meaningful deployment model for logger-core comparison.
 - Treat `*Craw` as a diagnostic for C-side rebuilding semantics with the cgo cost paid once per benchmark case.
-- Treat `jsonLiblogger` as a benchmark-only JSON comparison with different semantics: Unix-seconds timestamps, no `with()`, no color path, and no native boolean field type.
+- Treat `jsonLiblogger` as a benchmark-only JSON comparison showing a simpler JSON logger, not a full peer for modern container-style structured JSONL workloads: Unix-seconds timestamps, no `with()` path for persistent structured fields, no color path, no native boolean field type, and much worse performance on the production-shaped benchmark.
+- Treat `jsonQuill` as a benchmark-only JSON comparison showing why Quill is not a first-class structured-JSON logger for modern container-style JSONL workloads: no `with()` path for persistent structured fields, `JsonSink` named arguments that are stringified internally instead of preserved as typed fields, a benchmark adapter that reconstructs typed JSON output so Quill pays the full cost of being forced into this class, and much worse performance on the production-shaped benchmark.
 
 ## Elevator Pitch
 
@@ -82,3 +85,4 @@ elevatorpitch behavior.
 - `colconGo` / `colconC`
 
 If the optional `liblogger` helper was built, `jsonLiblogger` is included automatically.
+If the optional `Quill` helper was built, `jsonQuill` is available only when `-include-quill` is passed.

@@ -44,6 +44,41 @@ function(pslog_enable_coverage_if_requested target)
     endif()
 endfunction()
 
+function(pslog_assert_fuzz_toolchain_supported)
+    set(fuzz_probe_dir "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/fuzz-toolchain-probe")
+    set(fuzz_probe_source "${fuzz_probe_dir}/probe.c")
+    set(fuzz_probe_binary "${fuzz_probe_dir}/probe")
+
+    file(MAKE_DIRECTORY "${fuzz_probe_dir}")
+    file(WRITE "${fuzz_probe_source}" [=[
+int LLVMFuzzerTestOneInput(const unsigned char *data, unsigned long size) {
+    (void)data;
+    (void)size;
+    return 0;
+}
+]=])
+
+    execute_process(
+        COMMAND "${CMAKE_C_COMPILER}"
+            -v
+            -fsanitize=fuzzer,address
+            -fno-omit-frame-pointer
+            "${fuzz_probe_source}"
+            -o "${fuzz_probe_binary}"
+        RESULT_VARIABLE fuzz_probe_result
+        OUTPUT_VARIABLE fuzz_probe_stdout
+        ERROR_VARIABLE fuzz_probe_stderr
+    )
+
+    if(NOT fuzz_probe_result EQUAL 0)
+        message(FATAL_ERROR
+            "PSLOG_BUILD_FUZZ=ON requires a C toolchain that can link -fsanitize=fuzzer,address. "
+            "The selected compiler is '${CMAKE_C_COMPILER}'. Install the matching compiler-rt/libFuzzer runtime "
+            "for this Clang toolchain or use a Clang toolchain that provides those libraries.\n"
+            "clang output:\n${fuzz_probe_stdout}\n${fuzz_probe_stderr}")
+    endif()
+endfunction()
+
 find_program(CLANG_FORMAT_BIN NAMES clang-format)
 
 file(GLOB_RECURSE PSLOG_FORMAT_SOURCES CONFIGURE_DEPENDS
@@ -79,10 +114,14 @@ option(PSLOG_BUILD_TESTS "Build unit tests" ON)
 option(PSLOG_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(PSLOG_BUILD_FUZZ "Build fuzz targets" OFF)
 option(PSLOG_BENCHMARK_WITH_LIBLOGGER "Enable optional benchmark-only liblogger comparisons" OFF)
+option(PSLOG_BENCHMARK_WITH_QUILL "Enable optional benchmark-only Quill comparisons" OFF)
 option(PSLOG_ENABLE_COVERAGE "Build test targets with gcov coverage instrumentation" OFF)
 
-if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER)
+if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER OR PSLOG_BENCHMARK_WITH_QUILL)
     include(FetchContent)
+endif()
+
+if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER)
     set(JANSSON_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set(JANSSON_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set(JANSSON_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -90,7 +129,7 @@ if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER)
     set(JANSSON_INSTALL OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(jansson
         GIT_REPOSITORY https://github.com/akheron/jansson.git
-        GIT_TAG v2.14.1
+        GIT_TAG v2.15.0
     )
     FetchContent_MakeAvailable(jansson)
     set_target_properties(jansson PROPERTIES
@@ -236,6 +275,21 @@ if(PSLOG_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/version_resolution_test.cmake
     )
     set_tests_properties(version_resolution_test PROPERTIES RUN_SERIAL TRUE)
+    add_test(NAME c_only_configure_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/c_only_configure_test.cmake
+    )
+    set_tests_properties(c_only_configure_test PROPERTIES RUN_SERIAL TRUE)
+    add_test(NAME clean_script_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/clean_script_test.cmake
+    )
+    set_tests_properties(clean_script_test PROPERTIES RUN_SERIAL TRUE)
 endif()
 
 if(PSLOG_BUILD_BENCHMARKS)
@@ -277,6 +331,39 @@ if(PSLOG_BUILD_BENCHMARKS)
         target_compile_definitions(pslog_bench_liblogger PRIVATE PSLOG_HAVE_LIBLOGGER_BENCH=1)
     endif()
 
+    if(PSLOG_BENCHMARK_WITH_QUILL)
+        include(CheckLanguage)
+        check_language(CXX)
+        if(NOT CMAKE_CXX_COMPILER)
+            message(FATAL_ERROR
+                "PSLOG_BENCHMARK_WITH_QUILL=ON requires a working C++ compiler for the benchmark-only Quill helper")
+        endif()
+        enable_language(CXX)
+
+        add_library(pslog_bench_quill SHARED bench/bench_quill.cpp)
+        FetchContent_Declare(quill
+            GIT_REPOSITORY https://github.com/odygrd/quill.git
+            GIT_TAG 7c0ffa54e51c2b8db6ec091c2922aeaf9b3b08c0
+        )
+        FetchContent_GetProperties(quill)
+        if(NOT quill_POPULATED)
+            FetchContent_Populate(quill)
+        endif()
+
+        target_include_directories(pslog_bench_quill PRIVATE
+            ${quill_SOURCE_DIR}/include
+        )
+        target_link_libraries(pslog_bench_quill PRIVATE Threads::Threads)
+        target_compile_features(pslog_bench_quill PRIVATE cxx_std_17)
+    else()
+        add_library(pslog_bench_quill SHARED bench/bench_quill_stub.c)
+    endif()
+    target_include_directories(pslog_bench_quill PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    set_target_properties(pslog_bench_quill PROPERTIES
+        OUTPUT_NAME pslog_bench_quill
+        POSITION_INDEPENDENT_CODE ON
+    )
+
     add_executable(pslog_bench
         bench/bench_main.c
         ${PSLOG_BENCH_SUPPORT_SOURCES}
@@ -291,6 +378,11 @@ if(PSLOG_BUILD_BENCHMARKS)
 endif()
 
 if(PSLOG_BUILD_FUZZ)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "PSLOG_BUILD_FUZZ=ON requires Clang as the C compiler")
+    endif()
+    pslog_assert_fuzz_toolchain_supported()
+
     add_executable(pslog_fuzz fuzz/pslog_fuzz.c)
     target_include_directories(pslog_fuzz PRIVATE include)
     target_link_libraries(pslog_fuzz PRIVATE pslog_static)

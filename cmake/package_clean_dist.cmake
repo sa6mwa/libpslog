@@ -1,4 +1,8 @@
-set(dist_dir "${PSLOG_ROOT}/dist")
+execute_process(
+    COMMAND "${PSLOG_ROOT}/scripts/clean.sh" --dist-only --root "${PSLOG_ROOT}"
+    RESULT_VARIABLE clean_result
+)
 
-file(REMOVE_RECURSE "${dist_dir}")
-file(MAKE_DIRECTORY "${dist_dir}")
+if(NOT clean_result EQUAL 0)
+    message(FATAL_ERROR "failed to clean dist under ${PSLOG_ROOT}")
+endif()

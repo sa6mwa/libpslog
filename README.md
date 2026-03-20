@@ -261,6 +261,12 @@ The benchmark suite covers:
 - `with()`-based production shapes
 - `kvfmt` convenience paths
 - optional benchmark-only `liblogger` comparison on JSON
+- optional benchmark-only `Quill` comparison on JSON
+
+The external comparisons are intentionally scoped:
+
+- `liblogger` is kept only as a simple JSON baseline. It emits JSON, but it is still not a full peer for modern container-style structured JSONL workloads: no `with()`-style persistent fields, no native boolean field type, and a narrower JSON surface than `libpslog`. It is also far slower on the production-shaped benchmark, so this is not just a feature gap.
+- `Quill` is kept only as an opt-in negative comparison. Its `JsonSink` is not first-class structured JSON for modern container-style JSONL logging: it does not preserve typed structured fields, it stringifies named arguments internally, and it lacks persistent structured-field attachment. It is also far slower on the production-shaped benchmark once forced into this workload class. If you are evaluating JSON loggers for Kubernetes, serverless, or other container-first workloads, do not treat Quill's `JsonSink` as the same kind of JSON logging product as `libpslog`.
 
 See [bench/README.md](bench/README.md) and [gobencher/README.md](gobencher/README.md) for naming and interpretation details.
 

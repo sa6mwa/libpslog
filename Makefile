@@ -37,6 +37,7 @@ GO_BENCH_COUNT ?= 1
 	cross-build \
 	cross-test \
 	release \
+	clean \
 	clean-dist
 
 help:
@@ -57,7 +58,8 @@ help:
 		'make cross-build     Build all non-host cross release presets.' \
 		'make cross-test      Test all non-host cross release presets.' \
 		'make release         Run the full Linux release matrix and package generation.' \
-		'make clean-dist      Remove dist/ release artifacts via CMake target.'
+		'make clean           Remove build/ and dist/ generated artifacts.' \
+		'make clean-dist      Remove dist/ release artifacts.'
 
 build:
 	cmake --preset $(DEBUG_PRESET)
@@ -108,19 +110,21 @@ benchmarks-all: benchmarks-c benchmarks-gobencher
 benchmarks: benchmarks-all
 
 cross-build:
-	@for preset in $(CROSS_RELEASE_PRESETS); do \
+	@set -e; for preset in $(CROSS_RELEASE_PRESETS); do \
 		cmake --preset "$$preset"; \
 		cmake --build --preset "$$preset"; \
 	done
 
 cross-test: cross-build
-	@for preset in $(CROSS_RELEASE_PRESETS); do \
+	@set -e; for preset in $(CROSS_RELEASE_PRESETS); do \
 		ctest --preset "$$preset" --output-on-failure; \
 	done
 
 release:
 	./scripts/run_linux_release_matrix.sh
 
+clean:
+	./scripts/clean.sh
+
 clean-dist:
-	cmake --preset $(RELEASE_PRESET)
-	cmake --build --preset package-clean-dist
+	./scripts/clean.sh --dist-only

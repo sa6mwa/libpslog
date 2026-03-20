@@ -6,7 +6,9 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 cd "$repo_root"
 
-cmake --preset release
+cmake --preset release \
+  -DPSLOG_BENCHMARK_WITH_LIBLOGGER=OFF \
+  -DPSLOG_BENCHMARK_WITH_QUILL=OFF
 cmake --build --preset release
 ctest --preset debug
 

@@ -35,6 +35,11 @@ func ComparisonNames() []string {
 	return append(names, libloggerComparisonNames()...)
 }
 
+func ComparisonNamesWithQuill() []string {
+	names := ComparisonNames()
+	return append(names, quillComparisonNames()...)
+}
+
 func newGoLoggerWithTimestamp(w io.Writer, variant Variant, timestamps bool) pslog.Logger {
 	opts := pslog.Options{
 		Mode:       variant.Mode,

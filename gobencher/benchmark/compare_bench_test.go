@@ -22,6 +22,7 @@ var (
 	benchRawDyn        *CRawData
 	benchRawWith       CRawFields
 	benchLiblogger     *LibloggerData
+	benchQuill         *QuillData
 	benchDataLoadError error
 )
 
@@ -48,6 +49,13 @@ func loadBenchData() {
 	benchRawWith = benchRawDyn.PrepareFields(benchStaticFields)
 	if HasLiblogger() {
 		benchLiblogger = NewLibloggerData(benchEntries)
+	}
+	if HasQuill() {
+		benchQuill = NewQuillData(benchEntries)
+		if benchQuill != nil && benchQuill.initErr != nil {
+			benchDataLoadError = benchQuill.initErr
+			return
+		}
 	}
 }
 
@@ -263,6 +271,22 @@ func BenchmarkProductionCompare(b *testing.B) {
 			b.ReportMetric(float64(result.BytesWritten)/float64(result.Ops), "bytes/op")
 		})
 	}
+	if HasQuill() {
+		b.Run("jsonQuill", func(b *testing.B) {
+			result, err := RunQuill(benchQuill, b.N)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if result.BytesWritten == 0 {
+				b.Fatal("jsonQuill wrote zero bytes")
+			}
+			if result.Ops == 0 {
+				b.Fatal("jsonQuill reported zero ops")
+			}
+			b.ReportMetric(float64(result.Elapsed.Nanoseconds())/float64(result.Ops), "c_ns/op")
+			b.ReportMetric(float64(result.BytesWritten)/float64(result.Ops), "bytes/op")
+		})
+	}
 }
 
 func BenchmarkFixedCompare(b *testing.B) {
@@ -271,11 +295,15 @@ func BenchmarkFixedCompare(b *testing.B) {
 	kvfmt, err := NewCKVFmtData(entries)
 	raw := NewCRawData(entries)
 	libloggerData := NewLibloggerData(entries)
+	quillData := NewQuillData(entries)
 	defer prepared.Close()
 	defer kvfmt.Close()
 	defer raw.Close()
 	if libloggerData != nil {
 		defer libloggerData.Close()
+	}
+	if quillData != nil {
+		defer quillData.Close()
 	}
 	if err != nil {
 		b.Fatal(err)
@@ -414,6 +442,22 @@ func BenchmarkFixedCompare(b *testing.B) {
 			}
 			if result.Ops == 0 {
 				b.Fatal("jsonLiblogger reported zero ops")
+			}
+			b.ReportMetric(float64(result.Elapsed.Nanoseconds())/float64(result.Ops), "c_ns/op")
+			b.ReportMetric(float64(result.BytesWritten)/float64(result.Ops), "bytes/op")
+		})
+	}
+	if HasQuill() {
+		b.Run("jsonQuill", func(b *testing.B) {
+			result, err := RunQuill(quillData, b.N)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if result.BytesWritten == 0 {
+				b.Fatal("jsonQuill wrote zero bytes")
+			}
+			if result.Ops == 0 {
+				b.Fatal("jsonQuill reported zero ops")
 			}
 			b.ReportMetric(float64(result.Elapsed.Nanoseconds())/float64(result.Ops), "c_ns/op")
 			b.ReportMetric(float64(result.BytesWritten)/float64(result.Ops), "bytes/op")

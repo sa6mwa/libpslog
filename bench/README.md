@@ -100,6 +100,36 @@ cmake --build --preset release
 ./build/release/pslog_bench 200000 liblogger_json liblogger_json_prod
 ```
 
-This fetches both `liblogger` and its `jansson` dependency only for the benchmark build. The compare is intentionally limited to non-colored JSON because that is the surface `liblogger` actually exposes.
+This fetches both `liblogger` and its `jansson` dependency only for the benchmark build.
+
+Important caveats:
+
+- this compare is JSON-only
+- `liblogger` emits JSON directly, but it is still not a full peer for modern container-style structured JSONL workloads
+- `liblogger` does not expose `with()`-style persistent structured fields
+- `liblogger` does not expose a native boolean field type on this path
+- `liblogger` is also far slower on the production-shaped benchmark, so the issue is not just missing features
+- the compare is intentionally limited to non-colored JSON because that is the surface `liblogger` actually exposes
 
 Once the release build was produced with that option, `gobencher` and `go run ./cmd/elevatorpitch` will include the `jsonLiblogger` compare automatically.
+
+## Optional Quill Compare
+
+`Quill` is benchmark-only. To enable it:
+
+```sh
+cmake --preset release -DPSLOG_BENCHMARK_WITH_QUILL=ON
+cmake --build --preset release
+```
+
+The `gobencher` benchmark suite will include `jsonQuill` automatically, while
+the live elevator pitch includes it only when you pass `-include-quill`.
+
+Important caveats:
+
+- this compare is JSON-only
+- Quill does not expose `with()`-style persistent structured fields on this path, so static fields are replayed on every event
+- Quill's `JsonSink` is not first-class structured JSON for modern container-style JSONL logging: it surfaces named arguments as formatted strings instead of emitting typed structured fields directly
+- Quill is also far slower on the production-shaped benchmark once forced into this workload class, so this is not just an API mismatch on paper
+- if you are looking for a JSON logger for Kubernetes, serverless, or other container-first workloads, Quill should not be read as offering the same kind of JSON logging product as `libpslog`
+- the benchmark adapter reconstructs typed JSON output from Quill's stringified surface so Quill is measured only after paying the full cost of being forced into this class

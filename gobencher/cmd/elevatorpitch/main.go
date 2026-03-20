@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	loggerOrder = benchmark.ComparisonNames()
+	loggerOrder []string
 
 	barLeftPad  = (columnWidth - barWidth) / 2
 	barRightPad = columnWidth - barWidth - barLeftPad
@@ -63,6 +63,7 @@ func main() {
 	updateInterval := flag.Duration("interval", defaultUpdateInterval, "UI refresh interval")
 	limit := flag.Int("limit", benchmark.DefaultProductionLimit, "limit number of log entries to replay")
 	maxLinesCap := flag.Uint64("max-lines", maxLines, "cap for chart Y axis (lines per run)")
+	includeQuill := flag.Bool("include-quill", false, "include optional Quill compare in the chart")
 	diagramPaletteName := flag.String("diagram-palette", "solarized", "diagram palette (monokai|synthwave84|solarized|catppuccin|dracula|gruvboxlight|gruvbox|tokyo|outrun|nord|material|everforest|one-dark)")
 	flag.Parse()
 
@@ -72,6 +73,10 @@ func main() {
 		os.Exit(1)
 	}
 	diagramPalette = diagramPaletteFor(*diagramPaletteName)
+	loggerOrder = benchmark.ComparisonNames()
+	if *includeQuill {
+		loggerOrder = benchmark.ComparisonNamesWithQuill()
+	}
 
 	staticFields, staticKeys := benchmark.ProductionStaticFields(entries)
 	dynamicEntries := benchmark.ProductionEntriesWithout(entries, staticKeys)
@@ -97,6 +102,11 @@ func main() {
 		libloggerData := benchmark.NewLibloggerData(entries)
 		defer libloggerData.Close()
 		runners = append(runners, runner{name: "jsonLiblogger", run: libloggerRunner(libloggerData)})
+	}
+	if *includeQuill && benchmark.HasQuill() {
+		quillData := benchmark.NewQuillData(entries)
+		defer quillData.Close()
+		runners = append(runners, runner{name: "jsonQuill", run: quillRunner(quillData)})
 	}
 
 	runLiveBenchmark(runners, loggerOrder, *duration, *updateInterval, *maxLinesCap)
@@ -168,6 +178,25 @@ func libloggerRunner(data *benchmark.LibloggerData) func(context.Context, *runne
 			result, err := benchmark.RunLiblogger(data, cRunChunk)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "run liblogger benchmark: %v\n", err)
+				return
+			}
+			metrics.lines.Add(result.Ops)
+			metrics.bytes.Add(result.BytesWritten)
+		}
+	}
+}
+
+func quillRunner(data *benchmark.QuillData) func(context.Context, *runnerMetrics) {
+	return func(ctx context.Context, metrics *runnerMetrics) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			result, err := benchmark.RunQuill(data, cRunChunk)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "run quill benchmark: %v\n", err)
 				return
 			}
 			metrics.lines.Add(result.Ops)
