@@ -6,14 +6,14 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 cd "$repo_root"
 
-cmake --preset release \
+cmake --preset host \
   -DPSLOG_BENCHMARK_WITH_LIBLOGGER=OFF \
   -DPSLOG_BENCHMARK_WITH_QUILL=OFF
-cmake --build --preset release
+cmake --build --preset host
 ctest --preset debug
 
 printf '\n== Pure C benchmark rebaseline ==\n'
-./build/release/pslog_bench 500000 all
+./build/host/pslog_bench 500000 all
 
 printf '\n== Go vs C benchmark compare ==\n'
 (

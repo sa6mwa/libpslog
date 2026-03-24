@@ -83,16 +83,27 @@ find_program(CLANG_FORMAT_BIN NAMES clang-format)
 
 file(GLOB_RECURSE PSLOG_FORMAT_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/*.hpp
 )
 
 if(CLANG_FORMAT_BIN)

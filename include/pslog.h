@@ -827,19 +827,23 @@ pslog_field pslog_duration_field(const char *key, long seconds,
 void pslog_fields(pslog_logger *log, pslog_level level, const char *msg,
                   const pslog_field *fields, size_t count);
 
-/** Emits a trace event through the free-function API; NULL logger is a no-op. */
+/** Emits a trace event through the free-function API; NULL logger is a no-op.
+ */
 void pslog_trace(pslog_logger *log, const char *msg, const pslog_field *fields,
                  size_t count);
-/** Emits a debug event through the free-function API; NULL logger is a no-op. */
+/** Emits a debug event through the free-function API; NULL logger is a no-op.
+ */
 void pslog_debug(pslog_logger *log, const char *msg, const pslog_field *fields,
                  size_t count);
-/** Emits an info event through the free-function API; NULL logger is a no-op. */
+/** Emits an info event through the free-function API; NULL logger is a no-op.
+ */
 void pslog_info(pslog_logger *log, const char *msg, const pslog_field *fields,
                 size_t count);
 /** Emits a warn event through the free-function API; NULL logger is a no-op. */
 void pslog_warn(pslog_logger *log, const char *msg, const pslog_field *fields,
                 size_t count);
-/** Emits an error event through the free-function API; NULL logger is a no-op. */
+/** Emits an error event through the free-function API; NULL logger is a no-op.
+ */
 void pslog_error(pslog_logger *log, const char *msg, const pslog_field *fields,
                  size_t count);
 /**

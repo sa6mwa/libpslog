@@ -46,7 +46,7 @@ require_file "$HOME/.local/cross/arm-linux-musleabihf/arm-linux-musleabihf/lib/l
 
 cd "$repo_root"
 
-cmake --preset release
+cmake --preset host
 cmake --build --preset package-clean-dist
 
 run_target linux-gnu-release package-runtime-linux-gnu package-dev-linux-gnu

@@ -38,9 +38,10 @@ static void pslog_append_json_kvfmt_fields_plain(
     pslog_shared_state *shared, pslog_buffer *buffer,
     const pslog_kvfmt_cache_entry *entry, int *first_field, int saved_errno,
     va_list ap);
-static void pslog_append_json_kvfmt_color_prefix(
-    pslog_shared_state *shared, pslog_buffer *buffer,
-    const pslog_kvfmt_field_spec *spec);
+static void
+pslog_append_json_kvfmt_color_prefix(pslog_shared_state *shared,
+                                     pslog_buffer *buffer,
+                                     const pslog_kvfmt_field_spec *spec);
 static void pslog_append_json_kvfmt_fields_color(
     pslog_shared_state *shared, pslog_buffer *buffer,
     const pslog_kvfmt_cache_entry *entry, int *first_field, int saved_errno,
@@ -58,8 +59,7 @@ static const char *pslog_json_level_field_literal(pslog_level level,
 static const char *pslog_json_message_prefix(int verbose_fields,
                                              size_t *len_out);
 static void pslog_append_json_color_literal(pslog_buffer *buffer,
-                                            const char *color,
-                                            size_t color_len,
+                                            const char *color, size_t color_len,
                                             const char *text, size_t text_len,
                                             const char *suffix,
                                             size_t suffix_len);
@@ -159,9 +159,8 @@ static void pslog_append_json_value_plain(pslog_shared_state *shared,
     char errno_buffer[128];
 
     pslog_buffer_append_json_string_maybe_trusted(
-        buffer,
-        pslog_errno_string((int)field->as.signed_value, errno_buffer,
-                           sizeof(errno_buffer)));
+        buffer, pslog_errno_string((int)field->as.signed_value, errno_buffer,
+                                   sizeof(errno_buffer)));
     break;
   }
   }
@@ -294,11 +293,11 @@ static void pslog_append_json_value_color(pslog_shared_state *shared,
   case PSLOG_FIELD_ERRNO: {
     char errno_buffer[128];
 
-    PSLOG_BUFFER_APPEND_N_FAST(buffer, palette->error, shared->level_color_lens[4]);
+    PSLOG_BUFFER_APPEND_N_FAST(buffer, palette->error,
+                               shared->level_color_lens[4]);
     pslog_buffer_append_json_string_maybe_trusted(
-        buffer,
-        pslog_errno_string((int)field->as.signed_value, errno_buffer,
-                           sizeof(errno_buffer)));
+        buffer, pslog_errno_string((int)field->as.signed_value, errno_buffer,
+                                   sizeof(errno_buffer)));
     PSLOG_BUFFER_APPEND_N_FAST(buffer, palette->reset,
                                shared->palette_reset_len);
     break;
@@ -574,8 +573,7 @@ static const char *pslog_json_message_prefix(int verbose_fields,
 }
 
 static void pslog_append_json_color_literal(pslog_buffer *buffer,
-                                            const char *color,
-                                            size_t color_len,
+                                            const char *color, size_t color_len,
                                             const char *text, size_t text_len,
                                             const char *suffix,
                                             size_t suffix_len) {
@@ -614,9 +612,8 @@ static void pslog_append_json_timestamp_field_color(pslog_shared_state *shared,
     return;
   }
   time_key = shared->verbose_fields ? verbose_time_key : short_time_key;
-  time_key_len =
-      shared->verbose_fields ? sizeof(verbose_time_key) - 1u
-                             : sizeof(short_time_key) - 1u;
+  time_key_len = shared->verbose_fields ? sizeof(verbose_time_key) - 1u
+                                        : sizeof(short_time_key) - 1u;
   pslog_append_json_color_literal(buffer, shared->palette->key,
                                   shared->palette_key_len, time_key,
                                   time_key_len, NULL, 0u);
@@ -722,8 +719,8 @@ static void pslog_emit_json_color(pslog_logger_impl *impl, pslog_level level,
     if (!first_field) {
       PSLOG_BUFFER_APPEND_CHAR_FAST(&buffer, ',');
     }
-    pslog_append_json_level_field_color_cached_or_dynamic(
-        impl->shared, &buffer, impl->min_level, 1);
+    pslog_append_json_level_field_color_cached_or_dynamic(impl->shared, &buffer,
+                                                          impl->min_level, 1);
   }
 
   PSLOG_BUFFER_APPEND_CHAR_FAST(&buffer, '}');
@@ -966,8 +963,8 @@ static void pslog_append_json_kvfmt_fields_plain(
       char errno_buffer[128];
 
       pslog_buffer_append_json_string_maybe_trusted(
-          buffer, pslog_errno_string(saved_errno, errno_buffer,
-                                     sizeof(errno_buffer)));
+          buffer,
+          pslog_errno_string(saved_errno, errno_buffer, sizeof(errno_buffer)));
       break;
     }
     default:
@@ -1093,10 +1090,11 @@ static void pslog_append_json_kvfmt_fields_color(
     case PSLOG_KVFMT_ARG_ERRNO: {
       char errno_buffer[128];
 
-      PSLOG_BUFFER_APPEND_N_FAST(buffer, palette->error, shared->level_color_lens[4]);
+      PSLOG_BUFFER_APPEND_N_FAST(buffer, palette->error,
+                                 shared->level_color_lens[4]);
       pslog_buffer_append_json_string_maybe_trusted(
-          buffer, pslog_errno_string(saved_errno, errno_buffer,
-                                     sizeof(errno_buffer)));
+          buffer,
+          pslog_errno_string(saved_errno, errno_buffer, sizeof(errno_buffer)));
       PSLOG_BUFFER_APPEND_N_FAST(buffer, palette->reset,
                                  shared->palette_reset_len);
       break;
@@ -1108,9 +1106,10 @@ static void pslog_append_json_kvfmt_fields_color(
   }
 }
 
-static void pslog_append_json_kvfmt_color_prefix(
-    pslog_shared_state *shared, pslog_buffer *buffer,
-    const pslog_kvfmt_field_spec *spec) {
+static void
+pslog_append_json_kvfmt_color_prefix(pslog_shared_state *shared,
+                                     pslog_buffer *buffer,
+                                     const pslog_kvfmt_field_spec *spec) {
   if (shared == NULL || buffer == NULL || spec == NULL) {
     return;
   }

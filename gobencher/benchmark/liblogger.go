@@ -2,7 +2,7 @@ package benchmark
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../bench
-#cgo LDFLAGS: ${SRCDIR}/../../build/release/libpslog_bench_liblogger.so -Wl,-rpath,${SRCDIR}/../../build/release
+#cgo LDFLAGS: ${SRCDIR}/../../build/host/libpslog_bench_liblogger.so -Wl,-rpath,${SRCDIR}/../../build/host
 
 #include <stdlib.h>
 #include "bench_liblogger.h"

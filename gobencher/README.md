@@ -21,12 +21,12 @@ The primary `*C` comparison path crosses the cgo boundary once per benchmark cas
 Build the release library first:
 
 ```sh
-cmake --preset release
-cmake --build --preset release
+cmake --preset host
+cmake --build --preset host
 ```
 
-The cgo bridge links against `../build/release/libpslog.a`.
-It also includes the generated release header directory at `../build/release/generated/include`.
+The cgo bridge links against `../build/host/libpslog.a`.
+It also includes the generated host header directory at `../build/host/generated/include`.
 
 ## Useful Commands
 

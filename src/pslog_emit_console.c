@@ -51,8 +51,8 @@
       const char *_pslog_errno_text;                                           \
       size_t _pslog_errno_len;                                                 \
       _pslog_errno_text = pslog_errno_string((int)(field)->as.signed_value,    \
-                                             _pslog_errno_buffer,               \
-                                             sizeof(_pslog_errno_buffer));      \
+                                             _pslog_errno_buffer,              \
+                                             sizeof(_pslog_errno_buffer));     \
       _pslog_errno_len = strlen(_pslog_errno_text);                            \
       if (pslog_string_is_console_simple_internal(_pslog_errno_text)) {        \
         PSLOG_BUFFER_APPEND_N_FAST((buffer), _pslog_errno_text,                \
@@ -148,8 +148,8 @@
       size_t _pslog_errno_len;                                                 \
       int _pslog_console_simple;                                               \
       _pslog_errno_text = pslog_errno_string((int)(field)->as.signed_value,    \
-                                             _pslog_errno_buffer,               \
-                                             sizeof(_pslog_errno_buffer));      \
+                                             _pslog_errno_buffer,              \
+                                             sizeof(_pslog_errno_buffer));     \
       _pslog_errno_len = strlen(_pslog_errno_text);                            \
       _pslog_console_simple =                                                  \
           pslog_string_is_console_simple_internal(_pslog_errno_text);          \
@@ -194,9 +194,10 @@ static void pslog_append_console_field_set(pslog_logger_impl *impl,
 static void pslog_append_console_kvfmt_fields(
     pslog_shared_state *shared, pslog_buffer *buffer,
     const pslog_kvfmt_cache_entry *entry, int saved_errno, va_list ap);
-static void pslog_append_console_kvfmt_prefix(
-    pslog_shared_state *shared, pslog_buffer *buffer,
-    const pslog_kvfmt_field_spec *spec);
+static void
+pslog_append_console_kvfmt_prefix(pslog_shared_state *shared,
+                                  pslog_buffer *buffer,
+                                  const pslog_kvfmt_field_spec *spec);
 static const pslog_console_prefix_cache_entry *
 pslog_resolve_console_prefix(pslog_shared_state *shared,
                              const pslog_field *field);
@@ -413,9 +414,10 @@ static void pslog_append_console_kvfmt_fields(
   }
 }
 
-static void pslog_append_console_kvfmt_prefix(
-    pslog_shared_state *shared, pslog_buffer *buffer,
-    const pslog_kvfmt_field_spec *spec) {
+static void
+pslog_append_console_kvfmt_prefix(pslog_shared_state *shared,
+                                  pslog_buffer *buffer,
+                                  const pslog_kvfmt_field_spec *spec) {
   const char *value_color;
   size_t value_color_len;
 
@@ -516,8 +518,8 @@ pslog_resolve_console_prefix(pslog_shared_state *shared,
 
   prefix_len = 1u + field->key_len + 1u;
   if (shared->color_enabled) {
-    value_color = pslog_console_field_value_color(shared, field,
-                                                  &value_color_len);
+    value_color =
+        pslog_console_field_value_color(shared, field, &value_color_len);
     prefix_len += (shared->palette_reset_len * 2u) + shared->palette_key_len +
                   value_color_len;
     if (prefix_len >= sizeof(entry->prefix)) {

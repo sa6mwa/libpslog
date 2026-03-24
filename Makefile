@@ -3,10 +3,17 @@ SHELL := bash
 MAKEFLAGS += --no-builtin-rules
 
 DEBUG_PRESET := debug
-RELEASE_PRESET := release
+HOST_PRESET := host
 ASAN_PRESET := asan
 FUZZ_PRESET := fuzz
 COVERAGE_PRESET := coverage
+RELEASE_BUILD_PRESETS := \
+	linux-gnu-release \
+	linux-musl-release \
+	aarch64-linux-gnu-release \
+	aarch64-linux-musl-release \
+	armhf-linux-gnu-release \
+	armhf-linux-musl-release
 
 CROSS_RELEASE_PRESETS := \
 	aarch64-linux-gnu-release \
@@ -21,7 +28,9 @@ GO_BENCH_COUNT ?= 1
 .PHONY: \
 	help \
 	build \
+	build-host \
 	build-release \
+	format \
 	test \
 	test-all \
 	asan \
@@ -43,7 +52,9 @@ GO_BENCH_COUNT ?= 1
 help:
 	@printf '%s\n' \
 		'make build           Configure and build the debug preset.' \
-		'make build-release   Configure and build the release preset.' \
+		'make build-host      Configure and build the host-native local build.' \
+		'make build-release   Configure and build the full shipped release build matrix.' \
+		'make format          Run clang-format on repo C/C header sources.' \
 		'make test            Run the debug C test suite.' \
 		'make test-all        Run C tests, Go gobencher tests, and the Go-vs-C perf gate.' \
 		'make asan            Run the ASan/UBSan preset test suite.' \
@@ -65,14 +76,24 @@ build:
 	cmake --preset $(DEBUG_PRESET)
 	cmake --build --preset $(DEBUG_PRESET)
 
+build-host:
+	cmake --preset $(HOST_PRESET)
+	cmake --build --preset $(HOST_PRESET)
+
 build-release:
-	cmake --preset $(RELEASE_PRESET)
-	cmake --build --preset $(RELEASE_PRESET)
+	@set -e; for preset in $(RELEASE_BUILD_PRESETS); do \
+		cmake --preset "$$preset"; \
+		cmake --build --preset "$$preset"; \
+	done
+
+format:
+	cmake --preset $(DEBUG_PRESET)
+	cmake --build --preset format
 
 test: build
 	ctest --preset $(DEBUG_PRESET) --output-on-failure
 
-gobencher-tests: build-release
+gobencher-tests: build-host
 	cd gobencher && go test -a ./...
 
 perf-gate:
@@ -97,10 +118,10 @@ fuzz:
 	./build/fuzz/pslog_fuzz -max_total_time=$(FUZZ_TIME)
 	./build/fuzz/pslog_fuzz -max_total_time=$(FUZZ_TIME) -max_len=256
 
-benchmarks-c: build-release
-	./build/release/pslog_bench $(BENCH_ITERS) all
+benchmarks-c: build-host
+	./build/host/pslog_bench $(BENCH_ITERS) all
 
-benchmarks-gobencher: build-release
+benchmarks-gobencher: build-host
 	cd gobencher && go test ./benchmark -run '^$$' -bench . -benchmem -count=$(GO_BENCH_COUNT)
 
 benchmarks-go: benchmarks-gobencher

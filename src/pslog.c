@@ -216,7 +216,9 @@ void pslog_free_internal(void *ptr) {
 }
 
 #if defined(PSLOG_TEST_HOOKS)
-void pslog_test_allocator_reset(void) { memset(&pslog_test_alloc_stats, 0, sizeof(pslog_test_alloc_stats)); }
+void pslog_test_allocator_reset(void) {
+  memset(&pslog_test_alloc_stats, 0, sizeof(pslog_test_alloc_stats));
+}
 
 void pslog_test_allocator_get(pslog_test_allocator_stats *stats) {
   if (stats != NULL) {
@@ -646,7 +648,9 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
       len += 4u;
       continue;
     }
-    { return 0; }
+    {
+      return 0;
+    }
   }
   if (len_out != NULL) {
     *len_out = len;
@@ -1345,8 +1349,9 @@ pslog_logger *pslog_new(const pslog_config *config) {
   shared->level_color_lens[6] = pslog_cstr_len_or_zero(shared->palette->panic);
   shared->level_color_lens[7] =
       pslog_cstr_len_or_zero(shared->palette->null_value);
-  shared->kvfmt_ptr_cache = (pslog_kvfmt_ptr_cache_entry *)pslog_calloc_internal(
-      PSLOG_KVFMT_PTR_CACHE_SIZE, sizeof(*shared->kvfmt_ptr_cache));
+  shared->kvfmt_ptr_cache =
+      (pslog_kvfmt_ptr_cache_entry *)pslog_calloc_internal(
+          PSLOG_KVFMT_PTR_CACHE_SIZE, sizeof(*shared->kvfmt_ptr_cache));
   shared->refcount = 1u;
   if (effective.color == PSLOG_COLOR_ALWAYS) {
     shared->color_enabled = 1;
@@ -1954,9 +1959,8 @@ void pslog_buffer_append_json_string_maybe_trusted(pslog_buffer *buffer,
 
   if (pslog_string_is_ascii_trusted_measure(text, &text_len) ||
       pslog_string_is_trusted_measure(text, &text_len)) {
-    PSLOG_BUFFER_APPEND_JSON_TRUSTED_STRING_N_FAST(buffer,
-                                                   text != NULL ? text : "",
-                                                   text_len);
+    PSLOG_BUFFER_APPEND_JSON_TRUSTED_STRING_N_FAST(
+        buffer, text != NULL ? text : "", text_len);
     return;
   }
   pslog_buffer_append_json_string(buffer, text);
@@ -2558,7 +2562,8 @@ void pslog_append_timestamp(pslog_shared_state *shared, pslog_buffer *buffer) {
   }
   now = 0;
   nanoseconds = 0l;
-  if (shared->timestamp_cacheable && shared->time_now == pslog_default_time_now) {
+  if (shared->timestamp_cacheable &&
+      shared->time_now == pslog_default_time_now) {
     now = pslog_default_time_now_seconds();
   } else if (shared->time_now != NULL) {
     shared->time_now(shared->time_now_userdata, &now, &nanoseconds);
@@ -3315,9 +3320,7 @@ static void pslog_default_time_now(void *userdata, time_t *seconds_out,
   }
 }
 
-static time_t pslog_default_time_now_seconds(void) {
-  return time((time_t *)0);
-}
+static time_t pslog_default_time_now_seconds(void) { return time((time_t *)0); }
 
 static int pslog_time_format_is_rfc3339(const char *fmt) {
   return fmt != NULL && strcmp(fmt, PSLOG_TIME_FORMAT_RFC3339) == 0;
@@ -3422,7 +3425,8 @@ static void pslog_build_console_level_fragment(pslog_shared_state *shared,
              shared->console_level_fragment_lens[slot],
          label, label_len);
   shared->console_level_fragment_lens[slot] += label_len;
-  if (shared->color_enabled && shared->palette_reset_len > 0u && color_len > 0u) {
+  if (shared->color_enabled && shared->palette_reset_len > 0u &&
+      color_len > 0u) {
     memcpy(shared->console_level_fragments[slot] +
                shared->console_level_fragment_lens[slot],
            shared->palette->reset, shared->palette_reset_len);
@@ -3595,10 +3599,9 @@ static void pslog_build_console_literals(pslog_shared_state *shared) {
     PSLOG_BUFFER_APPEND_N_FAST(&buffer, shared->palette->message,
                                shared->palette_message_len);
   }
-  pslog_store_json_color_literal(&shared->console_message_prefix_len,
-                                 shared->console_message_prefix,
-                                 sizeof(shared->console_message_prefix),
-                                 &buffer);
+  pslog_store_json_color_literal(
+      &shared->console_message_prefix_len, shared->console_message_prefix,
+      sizeof(shared->console_message_prefix), &buffer);
   pslog_buffer_destroy(&buffer);
 }
 
@@ -3734,16 +3737,16 @@ static pslog_logger *pslog_vwithf_impl(pslog_logger *log, const char *kvfmt,
   saved_errno = errno;
   used_local_entry = 0;
   pslog_state_lock(impl->shared);
-  if (pslog_resolve_kvfmt_entry(impl->shared, kvfmt, &local_entry, &cache_entry)
-      != 0) {
+  if (pslog_resolve_kvfmt_entry(impl->shared, kvfmt, &local_entry,
+                                &cache_entry) != 0) {
     pslog_state_unlock(impl->shared);
     return NULL;
   }
   used_local_entry = cache_entry == &local_entry;
   pslog_state_unlock(impl->shared);
   if (pslog_materialize_kvfmt_fields(cache_entry, fields, &count,
-                                     impl->shared->mode, saved_errno, ap) !=
-      0) {
+                                     impl->shared->mode, saved_errno,
+                                     ap) != 0) {
     if (used_local_entry) {
       pslog_reset_kvfmt_cache_entry(&local_entry);
     }
@@ -4475,8 +4478,7 @@ static int pslog_output_init_file_perms(pslog_output *output, const char *path,
   if (fd < 0) {
     return errno != 0 ? errno : -1;
   }
-  fd_output =
-      (pslog_fd_output *)pslog_calloc_internal(1u, sizeof(*fd_output));
+  fd_output = (pslog_fd_output *)pslog_calloc_internal(1u, sizeof(*fd_output));
   if (fd_output == NULL) {
     close(fd);
     return -1;

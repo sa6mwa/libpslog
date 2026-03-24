@@ -18,9 +18,9 @@
 #include <sys/stat.h>
 
 #if defined(__unix__) || defined(__APPLE__) || defined(__FreeBSD__)
-#include <sys/mman.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -224,13 +224,14 @@ static int null_userdata_write(void *userdata, const char *data, size_t len,
   (void)userdata;
   g_null_userdata_sink.writes += 1;
   copy_len = len;
-  if (copy_len > sizeof(g_null_userdata_sink.data) - g_null_userdata_sink.len -
-                     1u) {
-    copy_len = sizeof(g_null_userdata_sink.data) - g_null_userdata_sink.len -
-               1u;
+  if (copy_len >
+      sizeof(g_null_userdata_sink.data) - g_null_userdata_sink.len - 1u) {
+    copy_len =
+        sizeof(g_null_userdata_sink.data) - g_null_userdata_sink.len - 1u;
   }
   if (copy_len > 0u) {
-    memcpy(g_null_userdata_sink.data + g_null_userdata_sink.len, data, copy_len);
+    memcpy(g_null_userdata_sink.data + g_null_userdata_sink.len, data,
+           copy_len);
     g_null_userdata_sink.len += copy_len;
     g_null_userdata_sink.data[g_null_userdata_sink.len] = '\0';
   }
@@ -294,7 +295,8 @@ static int assert_valid_json_lines(const char *text) {
         json_t *value;
 
         memset(&error, 0, sizeof(error));
-        value = json_loadb(line_start, line_len, JSON_REJECT_DUPLICATES, &error);
+        value =
+            json_loadb(line_start, line_len, JSON_REJECT_DUPLICATES, &error);
         if (value == NULL) {
           fprintf(stderr, "invalid json line: %s (line %d, column %d)\n",
                   error.text, error.line, error.column);
@@ -338,12 +340,12 @@ allocator_total_calls(const pslog_test_allocator_stats *stats) {
   return stats->malloc_calls + stats->calloc_calls + stats->realloc_calls;
 }
 
-static int
-assert_allocator_no_growth(const pslog_test_allocator_stats *before,
-                           const pslog_test_allocator_stats *after) {
+static int assert_allocator_no_growth(const pslog_test_allocator_stats *before,
+                                      const pslog_test_allocator_stats *after) {
   if (allocator_total_calls(after) != allocator_total_calls(before)) {
     fprintf(stderr,
-            "allocation regression: before=%lu after=%lu (malloc=%lu calloc=%lu realloc=%lu)\n",
+            "allocation regression: before=%lu after=%lu (malloc=%lu "
+            "calloc=%lu realloc=%lu)\n",
             allocator_total_calls(before), allocator_total_calls(after),
             after != NULL ? after->malloc_calls : 0u,
             after != NULL ? after->calloc_calls : 0u,
@@ -375,8 +377,8 @@ static void *threaded_log_worker(void *userdata) {
         pslog_logger *child;
 
         if (ctx->payload != NULL) {
-          child = ctx->log->withf(ctx->log, kvfmt, ctx->thread_id, i,
-                                  ctx->payload);
+          child =
+              ctx->log->withf(ctx->log, kvfmt, ctx->thread_id, i, ctx->payload);
         } else {
           child = ctx->log->withf(ctx->log, kvfmt, ctx->thread_id, i);
         }
@@ -418,9 +420,9 @@ static void *threaded_time_worker(void *userdata) {
     pslog_field fields[2];
 
     fields[0] = pslog_i64("tid", (pslog_int64)ctx->thread_id);
-    fields[1] = pslog_time_field("when", ctx->when.epoch_seconds,
-                                 ctx->when.nanoseconds,
-                                 ctx->when.utc_offset_minutes);
+    fields[1] =
+        pslog_time_field("when", ctx->when.epoch_seconds, ctx->when.nanoseconds,
+                         ctx->when.utc_offset_minutes);
     ctx->log->info(ctx->log, "thread-time", fields, 2u);
   }
   return NULL;
@@ -659,13 +661,11 @@ static int run_kvfmt_shorter_reused_buffer_child(int use_withf, char *output,
       _exit(121);
     }
 #if defined(MAP_ANON)
-    mapping =
-        mmap(NULL, (size_t)page_size * 2u, PROT_READ | PROT_WRITE,
-             MAP_PRIVATE | MAP_ANON, -1, 0);
+    mapping = mmap(NULL, (size_t)page_size * 2u, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANON, -1, 0);
 #else
-    mapping =
-        mmap(NULL, (size_t)page_size * 2u, PROT_READ | PROT_WRITE,
-             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    mapping = mmap(NULL, (size_t)page_size * 2u, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 #endif
     if (mapping == MAP_FAILED) {
       _exit(122);
@@ -1327,7 +1327,8 @@ static int test_errno_field_renders_error_text_and_color(void) {
   json_log->destroy(json_log);
 
   reset_sink(&console_sink);
-  console_log = new_logger(&console_sink, PSLOG_MODE_CONSOLE, PSLOG_COLOR_ALWAYS);
+  console_log =
+      new_logger(&console_sink, PSLOG_MODE_CONSOLE, PSLOG_COLOR_ALWAYS);
   TEST_ASSERT(console_log != NULL);
   field = pslog_errno("error", EACCES);
   console_log->error(console_log, "open failed", &field, 1u);
@@ -2039,16 +2040,16 @@ static int test_json_color_additional_paths(void) {
   fields[3].as.pointer_value = NULL;
 
   pslog_fields(log, PSLOG_LEVEL_PANIC, "panic-generic", fields, 4u);
-  pslog(log, PSLOG_LEVEL_FATAL, "fatal-generic",
-        "u=%u lu=%lu f=%f p=%p", 7u, 9ul, 1.5, (void *)&anchor);
+  pslog(log, PSLOG_LEVEL_FATAL, "fatal-generic", "u=%u lu=%lu f=%f p=%p", 7u,
+        9ul, 1.5, (void *)&anchor);
   pslog_fields(log, PSLOG_LEVEL_NOLEVEL, "nolevel-generic", NULL, 0u);
 
   warn_only = pslog_with_level(log, PSLOG_LEVEL_WARN);
   TEST_ASSERT(warn_only != NULL);
   annotated = pslog_with_level_field(warn_only);
   TEST_ASSERT(annotated != NULL);
-  pslog(annotated, PSLOG_LEVEL_ERROR, "annotated-kv",
-        "u=%u lu=%lu f=%f p=%p", 11u, 12ul, 2.5, (void *)&anchor);
+  pslog(annotated, PSLOG_LEVEL_ERROR, "annotated-kv", "u=%u lu=%lu f=%f p=%p",
+        11u, 12ul, 2.5, (void *)&anchor);
 
   strip_ansi(stripped, sizeof(stripped), sink.data);
   TEST_ASSERT(contains_text(stripped, "\"lvl\":\"panic\""));
@@ -3134,7 +3135,8 @@ static int test_json_invalid_utf8_bytes_are_escaped(void) {
   field = pslog_str("value", value);
   plain_log->info(plain_log, message, &field, 1u);
   TEST_ASSERT(contains_text(plain_sink.data, "\"msg\":\"m\\u00ffsg!\""));
-  TEST_ASSERT(contains_text(plain_sink.data, "\"value\":\"v\\u0080l\\u00fe!\""));
+  TEST_ASSERT(
+      contains_text(plain_sink.data, "\"value\":\"v\\u0080l\\u00fe!\""));
   TEST_ASSERT(assert_valid_json_lines(plain_sink.data) == 0);
   plain_log->destroy(plain_log);
 
@@ -3351,9 +3353,9 @@ static int test_zero_alloc_hot_path_emission(void) {
       config.utc = 1;
       config.output.write = memory_sink_write;
       config.output.close = NULL;
-      config.output.isatty =
-          colors[color_index] == PSLOG_COLOR_ALWAYS ? memory_sink_isatty_true
-                                                    : memory_sink_isatty;
+      config.output.isatty = colors[color_index] == PSLOG_COLOR_ALWAYS
+                                 ? memory_sink_isatty_true
+                                 : memory_sink_isatty;
       config.output.userdata = &sink;
 
       root = pslog_new(&config);
@@ -4358,10 +4360,9 @@ static int test_thread_safe_kvfmt_cache_entry_lifetime(void) {
   static const char *const kvfmts[] = {
       "tid=%d seq=%d alpha=%s", "tid=%d seq=%d beta=%s",
       "tid=%d seq=%d gamma=%s", "tid=%d seq=%d delta=%s"};
-  static const char *const keys[] = {"\"alpha\":\"payload\"",
-                                     "\"beta\":\"payload\"",
-                                     "\"gamma\":\"payload\"",
-                                     "\"delta\":\"payload\""};
+  static const char *const keys[] = {
+      "\"alpha\":\"payload\"", "\"beta\":\"payload\"", "\"gamma\":\"payload\"",
+      "\"delta\":\"payload\""};
   struct memory_sink sink;
   pslog_config config;
   pslog_logger *log;
@@ -4421,10 +4422,9 @@ static int test_thread_safe_withf_kvfmt_cache_entry_lifetime(void) {
   static const char *const kvfmts[] = {
       "tid=%d seq=%d alpha=%s", "tid=%d seq=%d beta=%s",
       "tid=%d seq=%d gamma=%s", "tid=%d seq=%d delta=%s"};
-  static const char *const keys[] = {"\"alpha\":\"payload\"",
-                                     "\"beta\":\"payload\"",
-                                     "\"gamma\":\"payload\"",
-                                     "\"delta\":\"payload\""};
+  static const char *const keys[] = {
+      "\"alpha\":\"payload\"", "\"beta\":\"payload\"", "\"gamma\":\"payload\"",
+      "\"delta\":\"payload\""};
   struct memory_sink sink;
   pslog_config config;
   pslog_logger *log;

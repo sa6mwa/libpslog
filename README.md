@@ -148,11 +148,11 @@ The main example is [examples/example.c](examples/example.c). It demonstrates:
 Build it with the simple flow:
 
 ```sh
-cmake --preset release
-cmake --build --preset release
+cmake --preset host
+cmake --build --preset host
 cd examples
-cc -I../build/release/generated/include -I../include \
-  -o example example.c ../build/release/libpslog.a
+cc -I../build/host/generated/include -I../include \
+  -o example example.c ../build/host/libpslog.a
 ./example
 ```
 
@@ -248,7 +248,7 @@ There are two benchmark layers:
 Useful commands:
 
 ```sh
-./build/release/pslog_bench 200000 all
+./build/host/pslog_bench 200000 all
 ./bench/run_rebaseline.sh
 ```
 

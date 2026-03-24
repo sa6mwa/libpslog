@@ -1,8 +1,8 @@
 package benchmark
 
 /*
-#cgo CFLAGS: -O3 -DNDEBUG -I${SRCDIR}/../../include -I${SRCDIR}/../../build/release/generated/include
-#cgo LDFLAGS: ${SRCDIR}/../../build/release/libpslog.a
+#cgo CFLAGS: -O3 -DNDEBUG -I${SRCDIR}/../../include -I${SRCDIR}/../../build/host/generated/include
+#cgo LDFLAGS: ${SRCDIR}/../../build/host/libpslog.a
 
 #include <stdlib.h>
 #include <string.h>

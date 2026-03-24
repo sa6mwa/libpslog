@@ -26,7 +26,7 @@
       }
     },
     {
-      "name": "release",
+      "name": "host",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
@@ -34,7 +34,7 @@
     },
     {
       "name": "linux-gnu-release",
-      "inherits": "release",
+      "inherits": "host",
       "cacheVariables": {
         "PSLOG_TARGET_ARCH": "x86_64",
         "PSLOG_TARGET_OS": "linux",
@@ -43,7 +43,7 @@
     },
     {
       "name": "linux-musl-release",
-      "inherits": "release",
+      "inherits": "host",
       "toolchainFile": "${sourceDir}/cmake/toolchains/linux-x86_64-musl.cmake",
       "cacheVariables": {
         "PSLOG_TARGET_ARCH": "x86_64",
@@ -53,22 +53,22 @@
     },
     {
       "name": "aarch64-linux-gnu-release",
-      "inherits": "release",
+      "inherits": "host",
       "toolchainFile": "${sourceDir}/cmake/toolchains/linux-aarch64-gnu.cmake"
     },
     {
       "name": "aarch64-linux-musl-release",
-      "inherits": "release",
+      "inherits": "host",
       "toolchainFile": "${sourceDir}/cmake/toolchains/linux-aarch64-musl.cmake"
     },
     {
       "name": "armhf-linux-gnu-release",
-      "inherits": "release",
+      "inherits": "host",
       "toolchainFile": "${sourceDir}/cmake/toolchains/linux-armhf-gnu.cmake"
     },
     {
       "name": "armhf-linux-musl-release",
-      "inherits": "release",
+      "inherits": "host",
       "toolchainFile": "${sourceDir}/cmake/toolchains/linux-armhf-musl.cmake"
     },
     {
@@ -113,8 +113,8 @@
       "configurePreset": "debug"
     },
     {
-      "name": "release",
-      "configurePreset": "release"
+      "name": "host",
+      "configurePreset": "host"
     },
     {
       "name": "asan",
@@ -129,6 +129,13 @@
       "configurePreset": "coverage",
       "targets": [
         "coverage-report"
+      ]
+    },
+    {
+      "name": "format",
+      "configurePreset": "debug",
+      "targets": [
+        "format"
       ]
     },
     {
@@ -165,7 +172,7 @@
     },
     {
       "name": "package-runtime",
-      "configurePreset": "release",
+      "configurePreset": "host",
       "targets": [
         "package-runtime"
       ]
@@ -214,7 +221,7 @@
     },
     {
       "name": "package-dev",
-      "configurePreset": "release",
+      "configurePreset": "host",
       "targets": [
         "package-dev"
       ]
@@ -263,14 +270,14 @@
     },
     {
       "name": "package-checksums",
-      "configurePreset": "release",
+      "configurePreset": "host",
       "targets": [
         "package-checksums"
       ]
     },
     {
       "name": "package-clean-dist",
-      "configurePreset": "release",
+      "configurePreset": "host",
       "targets": [
         "package-clean-dist"
       ]

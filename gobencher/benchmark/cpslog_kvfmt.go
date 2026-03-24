@@ -3,8 +3,8 @@ package benchmark
 //go:generate go run ../cmd/gen_ckvfmt_wrappers
 
 /*
-#cgo CFLAGS: -O3 -DNDEBUG -I${SRCDIR}/../../include -I${SRCDIR}/../../build/release/generated/include
-#cgo LDFLAGS: ${SRCDIR}/../../build/release/libpslog.a
+#cgo CFLAGS: -O3 -DNDEBUG -I${SRCDIR}/../../include -I${SRCDIR}/../../build/host/generated/include
+#cgo LDFLAGS: ${SRCDIR}/../../build/host/libpslog.a
 
 #include <stddef.h>
 #include <stdlib.h>

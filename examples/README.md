@@ -7,11 +7,11 @@ It is intentionally direct: each section creates and uses the public API without
 Build it after the release library exists:
 
 ```sh
-cmake --preset release
-cmake --build --preset release
+cmake --preset host
+cmake --build --preset host
 cd examples
-cc -I../build/release/generated/include -I../include \
-  -o example example.c ../build/release/libpslog.a
+cc -I../build/host/generated/include -I../include \
+  -o example example.c ../build/host/libpslog.a
 ./example
 ```
 

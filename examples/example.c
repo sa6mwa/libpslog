@@ -262,9 +262,9 @@ static void example_palettes(void) {
 
 int main(void) {
   puts("libpslog examples/example.c");
-  puts("build after `cmake --build --preset release` with:");
-  puts("  cc -I ../build/release/generated/include \\");
-  puts("    -o example example.c ../build/release/libpslog.a");
+  puts("build after `cmake --build --preset host` with:");
+  puts("  cc -I ../build/host/generated/include \\");
+  puts("    -o example example.c ../build/host/libpslog.a");
   puts("");
 
   example_console_and_json();
