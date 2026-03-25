@@ -269,6 +269,13 @@
       ]
     },
     {
+      "name": "package-single-header",
+      "configurePreset": "host",
+      "targets": [
+        "package-single-header"
+      ]
+    },
+    {
       "name": "package-checksums",
       "configurePreset": "host",
       "targets": [

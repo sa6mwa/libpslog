@@ -145,7 +145,7 @@ The main example is [examples/example.c](examples/example.c). It demonstrates:
 - palette iteration
 - adaptive color behavior
 
-Build it with the simple flow:
+Build it in normal library mode:
 
 ```sh
 cmake --preset host
@@ -155,6 +155,23 @@ cc -I../build/host/generated/include -I../include \
   -o example example.c ../build/host/libpslog.a
 ./example
 ```
+
+Build the same example in single-header mode:
+
+```sh
+cmake --preset host
+cmake --build --preset package-single-header
+cd examples
+cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
+  -I../build/host/generated/include \
+  -o example example.c
+./example
+```
+
+The shipped single-header artifacts are written to `dist/pslog-<version>.h`
+and `dist/pslog-<version>.h.gz`. The generated header contains the public API,
+the `PSLOG_IMPLEMENTATION` section, the embedded license text, and the
+single-header usage notes at the top of the file.
 
 ## Build And Test
 

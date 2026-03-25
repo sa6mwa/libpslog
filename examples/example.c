@@ -1,9 +1,18 @@
+#if defined(PSLOG_EXAMPLE_SINGLE_HEADER)
+#if (defined(__unix__) || defined(__APPLE__) || defined(__FreeBSD__)) &&       \
+    !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+#define PSLOG_IMPLEMENTATION
+#include "pslog_single_header.h"
+#else
+#include "../include/pslog.h"
+#endif
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-#include "../include/pslog.h"
 
 static void example_console_and_json(void) {
   pslog_config console_config;
@@ -262,9 +271,12 @@ static void example_palettes(void) {
 
 int main(void) {
   puts("libpslog examples/example.c");
-  puts("build after `cmake --build --preset host` with:");
+  puts("library mode:");
   puts("  cc -I ../build/host/generated/include \\");
-  puts("    -o example example.c ../build/host/libpslog.a");
+  puts("    -I ../include -o example example.c ../build/host/libpslog.a");
+  puts("single-header mode:");
+  puts("  cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \\");
+  puts("    -I ../build/host/generated/include -o example example.c");
   puts("");
 
   example_console_and_json();

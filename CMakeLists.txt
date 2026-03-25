@@ -17,6 +17,11 @@ configure_file(
     @ONLY
 )
 set(PSLOG_GENERATED_VERSION_HEADER "${PSLOG_GENERATED_INCLUDE_DIR}/pslog_version.h")
+set(PSLOG_SINGLE_HEADER_BUILD "${PSLOG_GENERATED_INCLUDE_DIR}/pslog_single_header.h")
+set(PSLOG_SINGLE_HEADER_ALIAS_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/single-header/include")
+set(PSLOG_SINGLE_HEADER_BUILD_ALIAS "${PSLOG_SINGLE_HEADER_ALIAS_INCLUDE_DIR}/pslog.h")
+set(PSLOG_SINGLE_HEADER_DIST "${CMAKE_CURRENT_SOURCE_DIR}/dist/pslog-${PSLOG_RESOLVED_VERSION}.h")
+set(PSLOG_SINGLE_HEADER_DIST_GZ "${PSLOG_SINGLE_HEADER_DIST}.gz")
 
 function(pslog_configure_c_target target)
     if(UNIX OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
@@ -188,6 +193,12 @@ set(PSLOG_SOURCES
     src/pslog_emit_console.c
     src/pslog_emit_json.c
 )
+set(PSLOG_SINGLE_HEADER_SOURCE_PATHS "")
+foreach(pslog_source IN LISTS PSLOG_SOURCES)
+    list(APPEND PSLOG_SINGLE_HEADER_SOURCE_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/${pslog_source}")
+endforeach()
+list(JOIN PSLOG_SINGLE_HEADER_SOURCE_PATHS "|" PSLOG_SINGLE_HEADER_SOURCE_PATHS_ARG)
+list(JOIN CMAKE_CROSSCOMPILING_EMULATOR "|" PSLOG_CROSSCOMPILING_EMULATOR_ARG)
 
 set(PSLOG_BENCH_SUPPORT_SOURCES
     bench/bench_fixture.c
@@ -268,6 +279,23 @@ if(PSLOG_BUILD_TESTS)
     target_link_libraries(pslog_tests PRIVATE pslog_test_static jansson)
     pslog_enable_coverage_if_requested(pslog_tests)
     add_test(NAME pslog_tests COMMAND pslog_tests)
+    add_executable(pslog_single_header_tests
+        tests/test_main_single_header.c
+        ${PSLOG_BENCH_SUPPORT_SOURCES}
+    )
+    target_include_directories(pslog_single_header_tests PRIVATE
+        ${PSLOG_SINGLE_HEADER_ALIAS_INCLUDE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${jansson_BINARY_DIR}/include
+    )
+    target_compile_definitions(pslog_single_header_tests PRIVATE PSLOG_TEST_HOOKS=1)
+    if(UNIX OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+        target_compile_definitions(pslog_single_header_tests PRIVATE _POSIX_C_SOURCE=200809L)
+    endif()
+    target_link_libraries(pslog_single_header_tests PRIVATE Threads::Threads jansson)
+    add_dependencies(pslog_single_header_tests package-single-header)
+    pslog_enable_coverage_if_requested(pslog_single_header_tests)
+    add_test(NAME pslog_single_header_tests COMMAND pslog_single_header_tests)
     add_test(NAME package_archives_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -301,6 +329,17 @@ if(PSLOG_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/clean_script_test.cmake
     )
     set_tests_properties(clean_script_test PROPERTIES RUN_SERIAL TRUE)
+    add_test(NAME example_integration_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
+            -DPSLOG_THREAD_LIBS=${CMAKE_THREAD_LIBS_INIT}
+            -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
+            -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/example_integration_test.cmake
+    )
+    set_tests_properties(example_integration_test PROPERTIES RUN_SERIAL TRUE)
 endif()
 
 if(PSLOG_BUILD_BENCHMARKS)
@@ -454,6 +493,24 @@ add_custom_target(package-dev
         -DPSLOG_STATIC_LIB=$<TARGET_FILE:pslog_static>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_dev.cmake
     DEPENDS pslog_static
+    VERBATIM
+)
+
+add_custom_target(package-single-header
+    COMMAND ${CMAKE_COMMAND}
+        -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+        -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
+        -DPSLOG_PUBLIC_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/pslog.h
+        -DPSLOG_PUBLIC_VERSION_HEADER=${PSLOG_GENERATED_VERSION_HEADER}
+        -DPSLOG_INTERNAL_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/src/pslog_internal.h
+        -DPSLOG_SINGLE_HEADER_BUILD=${PSLOG_SINGLE_HEADER_BUILD}
+        -DPSLOG_SINGLE_HEADER_BUILD_ALIAS=${PSLOG_SINGLE_HEADER_BUILD_ALIAS}
+        -DPSLOG_SINGLE_HEADER_DIST=${PSLOG_SINGLE_HEADER_DIST}
+        -DPSLOG_SINGLE_HEADER_DIST_GZ=${PSLOG_SINGLE_HEADER_DIST_GZ}
+        -DPSLOG_SINGLE_HEADER_SOURCES=${PSLOG_SINGLE_HEADER_SOURCE_PATHS_ARG}
+        -DPSLOG_CLANG_FORMAT_BIN=${CLANG_FORMAT_BIN}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_single_header.cmake
     VERBATIM
 )
 

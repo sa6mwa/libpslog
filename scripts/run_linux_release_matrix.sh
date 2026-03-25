@@ -56,6 +56,7 @@ run_target aarch64-linux-musl-release package-runtime-aarch64-linux-musl package
 run_target armhf-linux-gnu-release package-runtime-armhf-linux-gnu package-dev-armhf-linux-gnu
 run_target armhf-linux-musl-release package-runtime-armhf-linux-musl package-dev-armhf-linux-musl
 
+cmake --build --preset package-single-header
 cmake --build --preset package-checksums
 
 printf '\nLinux release matrix completed successfully.\n'

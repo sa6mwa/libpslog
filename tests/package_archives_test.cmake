@@ -1,14 +1,25 @@
 set(runtime_archive "${PSLOG_ROOT}/dist/libpslog-${PSLOG_VERSION}-${PSLOG_TARGET_ID}.tar.gz")
 set(dev_archive "${PSLOG_ROOT}/dist/libpslog-${PSLOG_VERSION}-${PSLOG_TARGET_ID}-dev.tar.gz")
+set(single_header "${PSLOG_ROOT}/dist/pslog-${PSLOG_VERSION}.h")
+set(single_header_gz "${single_header}.gz")
+set(checksums_file "${PSLOG_ROOT}/dist/libpslog-${PSLOG_VERSION}-CHECKSUMS")
 
-file(REMOVE "${runtime_archive}" "${dev_archive}")
+file(REMOVE "${runtime_archive}" "${dev_archive}" "${single_header}" "${single_header_gz}" "${checksums_file}")
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${PSLOG_BINARY_DIR}" --target package-runtime package-dev
+    COMMAND "${CMAKE_COMMAND}" --build "${PSLOG_BINARY_DIR}" --target package-runtime package-dev package-single-header
     RESULT_VARIABLE build_result
 )
 if(NOT build_result EQUAL 0)
-    message(FATAL_ERROR "failed to build package archives")
+    message(FATAL_ERROR "failed to build package archives and single-header artifact")
+endif()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" --build "${PSLOG_BINARY_DIR}" --target package-checksums
+    RESULT_VARIABLE checksum_build_result
+)
+if(NOT checksum_build_result EQUAL 0)
+    message(FATAL_ERROR "failed to build package checksums")
 endif()
 
 function(assert_archive_layout archive_path)
@@ -65,3 +76,32 @@ endfunction()
 
 assert_archive_layout("${runtime_archive}")
 assert_archive_layout("${dev_archive}")
+
+if(NOT EXISTS "${single_header}")
+    message(FATAL_ERROR "missing single-header artifact: ${single_header}")
+endif()
+if(NOT EXISTS "${single_header_gz}")
+    message(FATAL_ERROR "missing gzipped single-header artifact: ${single_header_gz}")
+endif()
+if(NOT EXISTS "${checksums_file}")
+    message(FATAL_ERROR "missing checksums file: ${checksums_file}")
+endif()
+
+file(READ "${single_header}" single_header_text)
+if(NOT single_header_text MATCHES "PSLOG_IMPLEMENTATION")
+    message(FATAL_ERROR "single-header artifact is missing PSLOG_IMPLEMENTATION section")
+endif()
+if(NOT single_header_text MATCHES "Artifact: pslog-${PSLOG_VERSION}\\.h")
+    message(FATAL_ERROR "single-header artifact is missing versioned artifact metadata")
+endif()
+if(NOT single_header_text MATCHES "MIT License")
+    message(FATAL_ERROR "single-header artifact is missing embedded license text")
+endif()
+
+file(READ "${checksums_file}" checksums_text)
+if(checksums_text MATCHES "(^|\n)[0-9a-f]+  pslog-${PSLOG_VERSION}\\.h(\n|$)")
+    message(FATAL_ERROR "checksums file unexpectedly includes pslog-${PSLOG_VERSION}.h")
+endif()
+if(NOT checksums_text MATCHES "(^|\n)[0-9a-f]+  pslog-${PSLOG_VERSION}\\.h\\.gz(\n|$)")
+    message(FATAL_ERROR "checksums file is missing pslog-${PSLOG_VERSION}.h.gz")
+endif()

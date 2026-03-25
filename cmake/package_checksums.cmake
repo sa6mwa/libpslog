@@ -3,7 +3,10 @@ set(checksums_name "libpslog-${PSLOG_VERSION}-CHECKSUMS")
 set(checksums_path "${dist_dir}/${checksums_name}")
 
 file(MAKE_DIRECTORY "${dist_dir}")
-file(GLOB release_entries RELATIVE "${dist_dir}" "${dist_dir}/libpslog-${PSLOG_VERSION}-*")
+file(GLOB release_entries RELATIVE "${dist_dir}"
+    "${dist_dir}/libpslog-${PSLOG_VERSION}-*"
+    "${dist_dir}/pslog-${PSLOG_VERSION}.h.gz"
+)
 
 set(checksum_inputs "")
 foreach(entry IN LISTS release_entries)

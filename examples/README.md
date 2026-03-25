@@ -4,7 +4,7 @@
 
 It is intentionally direct: each section creates and uses the public API without wrapping logger creation behind helper functions.
 
-Build it after the release library exists:
+Build it in normal library mode:
 
 ```sh
 cmake --preset host
@@ -12,6 +12,18 @@ cmake --build --preset host
 cd examples
 cc -I../build/host/generated/include -I../include \
   -o example example.c ../build/host/libpslog.a
+./example
+```
+
+Build it in single-header mode:
+
+```sh
+cmake --preset host
+cmake --build --preset package-single-header
+cd examples
+cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
+  -I../build/host/generated/include \
+  -o example example.c
 ./example
 ```
 

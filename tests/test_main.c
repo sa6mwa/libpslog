@@ -5,7 +5,9 @@
 
 #include "bench/bench_fixture.h"
 #include "pslog.h"
+#if !defined(PSLOG_SINGLE_HEADER_TEST)
 #include "src/pslog_internal.h"
+#endif
 
 #include <jansson.h>
 
