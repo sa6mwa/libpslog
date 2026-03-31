@@ -171,101 +171,52 @@
       "configurePreset": "armhf-linux-musl-release"
     },
     {
-      "name": "package-runtime",
+      "name": "package-archive",
       "configurePreset": "host",
       "targets": [
-        "package-runtime"
+        "package-archive"
       ]
     },
     {
-      "name": "package-runtime-linux-gnu",
+      "name": "package-archive-linux-gnu",
       "configurePreset": "linux-gnu-release",
       "targets": [
-        "package-runtime"
+        "package-archive"
       ]
     },
     {
-      "name": "package-runtime-linux-musl",
+      "name": "package-archive-linux-musl",
       "configurePreset": "linux-musl-release",
       "targets": [
-        "package-runtime"
+        "package-archive"
       ]
     },
     {
-      "name": "package-runtime-aarch64-linux-gnu",
+      "name": "package-archive-aarch64-linux-gnu",
       "configurePreset": "aarch64-linux-gnu-release",
       "targets": [
-        "package-runtime"
+        "package-archive"
       ]
     },
     {
-      "name": "package-runtime-aarch64-linux-musl",
+      "name": "package-archive-aarch64-linux-musl",
       "configurePreset": "aarch64-linux-musl-release",
       "targets": [
-        "package-runtime"
+        "package-archive"
       ]
     },
     {
-      "name": "package-runtime-armhf-linux-gnu",
+      "name": "package-archive-armhf-linux-gnu",
       "configurePreset": "armhf-linux-gnu-release",
       "targets": [
-        "package-runtime"
+        "package-archive"
       ]
     },
     {
-      "name": "package-runtime-armhf-linux-musl",
+      "name": "package-archive-armhf-linux-musl",
       "configurePreset": "armhf-linux-musl-release",
       "targets": [
-        "package-runtime"
-      ]
-    },
-    {
-      "name": "package-dev",
-      "configurePreset": "host",
-      "targets": [
-        "package-dev"
-      ]
-    },
-    {
-      "name": "package-dev-linux-gnu",
-      "configurePreset": "linux-gnu-release",
-      "targets": [
-        "package-dev"
-      ]
-    },
-    {
-      "name": "package-dev-linux-musl",
-      "configurePreset": "linux-musl-release",
-      "targets": [
-        "package-dev"
-      ]
-    },
-    {
-      "name": "package-dev-aarch64-linux-gnu",
-      "configurePreset": "aarch64-linux-gnu-release",
-      "targets": [
-        "package-dev"
-      ]
-    },
-    {
-      "name": "package-dev-aarch64-linux-musl",
-      "configurePreset": "aarch64-linux-musl-release",
-      "targets": [
-        "package-dev"
-      ]
-    },
-    {
-      "name": "package-dev-armhf-linux-gnu",
-      "configurePreset": "armhf-linux-gnu-release",
-      "targets": [
-        "package-dev"
-      ]
-    },
-    {
-      "name": "package-dev-armhf-linux-musl",
-      "configurePreset": "armhf-linux-musl-release",
-      "targets": [
-        "package-dev"
+        "package-archive"
       ]
     },
     {

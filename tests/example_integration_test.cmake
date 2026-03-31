@@ -10,6 +10,12 @@ endif()
 if(NOT DEFINED PSLOG_THREAD_LIBS)
     set(PSLOG_THREAD_LIBS "")
 endif()
+if(NOT DEFINED PSLOG_C_FLAGS)
+    set(PSLOG_C_FLAGS "")
+endif()
+if(NOT DEFINED PSLOG_EXE_LINKER_FLAGS)
+    set(PSLOG_EXE_LINKER_FLAGS "")
+endif()
 if(NOT DEFINED PSLOG_CROSSCOMPILING)
     set(PSLOG_CROSSCOMPILING FALSE)
 endif()
@@ -45,9 +51,12 @@ if(NOT build_result EQUAL 0)
 endif()
 
 separate_arguments(pslog_thread_libs NATIVE_COMMAND "${PSLOG_THREAD_LIBS}")
+separate_arguments(pslog_c_flags NATIVE_COMMAND "${PSLOG_C_FLAGS}")
+separate_arguments(pslog_exe_linker_flags NATIVE_COMMAND "${PSLOG_EXE_LINKER_FLAGS}")
 
 set(library_compile_command
     "${PSLOG_C_COMPILER}"
+    ${pslog_c_flags}
     "-I${PSLOG_BINARY_DIR}/generated/include"
     "-I${PSLOG_ROOT}/include"
     "-o" "${library_binary}"
@@ -55,6 +64,7 @@ set(library_compile_command
     "${PSLOG_BINARY_DIR}/libpslog.a"
 )
 list(APPEND library_compile_command ${pslog_thread_libs})
+list(APPEND library_compile_command ${pslog_exe_linker_flags})
 
 execute_process(
     COMMAND ${library_compile_command}
@@ -90,12 +100,14 @@ endif()
 
 set(single_header_compile_command
     "${PSLOG_C_COMPILER}"
+    ${pslog_c_flags}
     "-DPSLOG_EXAMPLE_SINGLE_HEADER=1"
     "-I${PSLOG_BINARY_DIR}/generated/include"
     "-o" "${single_header_binary}"
     "${example_source}"
 )
 list(APPEND single_header_compile_command ${pslog_thread_libs})
+list(APPEND single_header_compile_command ${pslog_exe_linker_flags})
 
 execute_process(
     COMMAND ${single_header_compile_command}

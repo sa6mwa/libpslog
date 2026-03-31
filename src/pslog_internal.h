@@ -179,6 +179,7 @@ struct pslog_shared_state {
   int verbose_fields;
   int color_enabled;
   const char *time_format;
+  char *time_format_storage;
   const pslog_palette *palette;
   size_t palette_key_len;
   size_t palette_string_len;

@@ -32,6 +32,10 @@ real clock. The production dataset strips source `ts` fields first, so the
 measured logger work includes the actual timestamp path instead of replaying
 pre-rendered timestamp text.
 
+The committed source of truth for that production dataset is
+`bench_production_dataset.c`. Other benchmark fixture forms are generated from
+it as build artifacts when needed.
+
 Committed benchmark artifacts belong in
 [performance-logs/](../performance-logs/README.md), not under `build/`. Treat
 `performance-logs/pure-c-baseline.txt` as the current checked-in baseline when
@@ -87,6 +91,7 @@ The compare naming used in `gobencher` is:
 - `*Cffi`: Go calling the C logger once per log call
 - `*Cprepared`: Go calling prebuilt native C field data once per log call
 - `*Craw`: one cgo call per benchmark case, with dynamic field rebuilding done inside C
+- `jsonLua`: embedded Lua 5.5 loading the shipped `pslog` rock from `build/luarocks`, limited to the JSON logger path
 
 See [gobencher/README.md](../gobencher/README.md) for the caveats and the elevator pitch runner.
 
@@ -111,7 +116,8 @@ Important caveats:
 - `liblogger` is also far slower on the production-shaped benchmark, so the issue is not just missing features
 - the compare is intentionally limited to non-colored JSON because that is the surface `liblogger` actually exposes
 
-Once the release build was produced with that option, `gobencher` and `go run ./cmd/elevatorpitch` will include the `jsonLiblogger` compare automatically.
+Once the release build was produced with that option, `gobencher` will include
+the `jsonLiblogger` compare automatically.
 
 ## Optional Quill Compare
 

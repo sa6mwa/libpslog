@@ -17,9 +17,9 @@
 static void example_console_and_json(void) {
   pslog_config console_config;
   pslog_config json_config;
-  pslog_logger *root;
   pslog_logger *console;
   pslog_logger *json;
+  pslog_logger *next;
   pslog_field fields[2];
 #define __FIELDS_LEN sizeof(fields) / sizeof(pslog_field)
 
@@ -32,17 +32,20 @@ static void example_console_and_json(void) {
   console_config.timestamps = 1;
   console_config.output = pslog_output_from_fp(stdout, 0);
 
-  root = pslog_new(&console_config);
+  console = pslog_new(&console_config);
   fields[0] = pslog_str("adapter", "libpslog");
   fields[1] = pslog_str("mode", "console");
-  console = root->with(root, fields, 2u);
-  console = console->with_level(console, PSLOG_LEVEL_TRACE);
+  next = console->with(console, fields, 2u);
+  console->destroy(console);
+  console = next;
+  next = console->with_level(console, PSLOG_LEVEL_TRACE);
+  console->destroy(console);
+  console = next;
   console->debug(console, "hello from console mode", NULL, 0u);
   console->info(console, "plain info line", NULL, 0u);
   console->warn(console, "warning line", NULL, 0u);
   console->error(console, "error line", NULL, 0u);
   console->destroy(console);
-  root->destroy(root);
 
   pslog_default_config(&json_config);
   json_config.mode = PSLOG_MODE_JSON;
@@ -51,15 +54,18 @@ static void example_console_and_json(void) {
   json_config.timestamps = 1;
   json_config.output = pslog_output_from_fp(stdout, 0);
 
-  root = pslog_new(&json_config);
+  json = pslog_new(&json_config);
   fields[0] = pslog_str("adapter", "libpslog");
   fields[1] = pslog_str("mode", "json");
-  json = root->with(root, fields, 2u);
-  json = json->with_level_field(json);
+  next = json->with(json, fields, 2u);
+  json->destroy(json);
+  json = next;
+  next = json->with_level_field(json);
+  json->destroy(json);
+  json = next;
   json->info(json, "hello from json mode", NULL, 0u);
   json->warn(json, "warning line", NULL, 0u);
   json->destroy(json);
-  root->destroy(root);
 
   puts("");
 }
@@ -67,6 +73,7 @@ static void example_console_and_json(void) {
 static void example_log_and_levels(void) {
   pslog_config config;
   pslog_logger *log;
+  pslog_logger *next;
   pslog_field fields[2];
 
   puts("== log() and level controls ==");
@@ -79,8 +86,12 @@ static void example_log_and_levels(void) {
   config.output = pslog_output_from_fp(stdout, 0);
 
   log = pslog_new(&config);
-  log = log->with_level_field(log);
-  log = log->with_level(log, PSLOG_LEVEL_DEBUG);
+  next = log->with_level_field(log);
+  log->destroy(log);
+  log = next;
+  next = log->with_level(log, PSLOG_LEVEL_DEBUG);
+  log->destroy(log);
+  log = next;
 
   fields[0] = pslog_str("path", "/v1/messages");
   fields[1] = pslog_u64("attempt", 3ul);
@@ -153,6 +164,7 @@ static void example_kvfmt(void) {
   pslog_config config;
   pslog_logger *log;
   pslog_logger *child;
+  pslog_logger *next;
 
   puts("== kvfmt ==");
 
@@ -164,7 +176,9 @@ static void example_kvfmt(void) {
   config.output = pslog_output_from_fp(stdout, 0);
 
   log = pslog_new(&config);
-  log = log->with_level_field(log);
+  next = log->with_level_field(log);
+  log->destroy(log);
+  log = next;
   child = log->withf(log, "service=%s subsystem=%s", "api", "worker");
   if (child != NULL) {
     child->info(child, "derived static kvfmt fields", NULL, 0u);
@@ -181,6 +195,7 @@ static void example_kvfmt(void) {
 static void example_env(void) {
   pslog_config seed;
   pslog_logger *log;
+  pslog_logger *next;
 
   puts("== pslog_new_from_env() ==");
 
@@ -193,7 +208,9 @@ static void example_env(void) {
 
   log = pslog_new_from_env("LOG_", &seed);
   if (log != NULL) {
-    log = log->with_level_field(log);
+    next = log->with_level_field(log);
+    log->destroy(log);
+    log = next;
     log->debugf(log, "logger from env", "source=%s ok=%b", "env", 1);
     log->destroy(log);
   }
@@ -218,6 +235,7 @@ static void example_palettes(void) {
     const pslog_palette *palette;
     pslog_logger *console;
     pslog_logger *json;
+    pslog_logger *next;
     pslog_field fields[3];
     int err;
 
@@ -248,8 +266,12 @@ static void example_palettes(void) {
     fields[1] = pslog_bool("cool", 1);
     fields[2] = pslog_errno("err", err);
 
-    console = console->with_level_field(console);
-    json = json->with_level_field(json);
+    next = console->with_level_field(console);
+    console->destroy(console);
+    console = next;
+    next = json->with_level_field(json);
+    json->destroy(json);
+    json = next;
     console->trace(console, "console palette", fields, __FIELDS_LEN);
     console->debug(console, "console palette", fields, __FIELDS_LEN);
     console->info(console, "console palette", fields, __FIELDS_LEN);

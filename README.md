@@ -20,6 +20,7 @@
 - Thread-safe shared logging through the same logger tree.
 - Zero-allocation hot-path emission for normal log lines, with chunked output for oversized lines instead of truncation.
 - Unit tests, fuzzing, pure C benchmarks, and Go-vs-C comparison benchmarks.
+- Optional Lua binding release artifacts shipped as `lua-pslog`.
 
 ## Release Targets
 
@@ -173,6 +174,76 @@ and `dist/pslog-<version>.h.gz`. The generated header contains the public API,
 the `PSLOG_IMPLEMENTATION` section, the embedded license text, and the
 single-header usage notes at the top of the file.
 
+## Lua Binding
+
+`libpslog` ships an optional Lua binding as the `lua-pslog` rock package. The
+Lua module itself is required as `pslog`:
+
+```lua
+local pslog = require("pslog")
+
+local log = pslog.new_json("/tmp/app.log", {
+  no_color = true,
+  disable_timestamp = true,
+}):with("service", "checkout")
+
+log:info("ready", "port", 8080, "ok", true)
+```
+
+The Lua binding keeps the same logger product shape as C and Go, but the API is
+written for Lua instead of mirroring the C surface literally:
+
+- ordinary Lua scalars are inferred automatically
+- structured logging through key/value pairs is the primary call shape
+- a single-table field form exists as convenience
+- explicit wrappers exist for semantic types Lua does not natively represent
+  such as bytes, time, duration, errno, trusted strings, and `u64`
+- constructors support stdout/stderr, file handles, file paths, and callback
+  sinks
+
+Examples:
+
+```lua
+log:info("typed fields",
+  "payload", pslog.bytes(string.char(0, 1, 2, 255)),
+  "started_at", pslog.time { sec = 1711737600, nsec = 0, offset = 0 },
+  "elapsed", pslog.duration_ms(125),
+  "errno", pslog.errno(2)
+)
+```
+
+Local Lua development helpers:
+
+```sh
+make lua-rock
+make lua-test
+```
+
+Run the Lua examples from the repository root:
+
+```sh
+make lua-rock
+eval "$(luarocks path --tree build/luarocks)"
+lua lua/examples/example.lua
+lua lua/examples/basic.lua
+lua lua/examples/from_env.lua
+lua lua/examples/callback.lua
+```
+
+Example entry points live under [`lua/examples/`](lua/examples/):
+
+- [`lua/examples/example.lua`](lua/examples/example.lua)
+- [`lua/examples/basic.lua`](lua/examples/basic.lua)
+- [`lua/examples/callback.lua`](lua/examples/callback.lua)
+- [`lua/examples/from_env.lua`](lua/examples/from_env.lua)
+
+The full Lua API reference lives in [`lua/README.md`](lua/README.md).
+
+`make release` now also emits:
+
+- `dist/lua-pslog-<version>-1.rockspec`
+- `dist/lua-pslog-<version>-1.src.rock`
+
 ## Build And Test
 
 If you want a simple frontend instead of typing the CMake commands directly, use the repository `Makefile`:
@@ -185,6 +256,7 @@ make fuzz
 make benchmarks-c
 make benchmarks-gobencher
 make benchmarks-all
+make lua-test
 make release
 ```
 
@@ -229,6 +301,8 @@ That script runs, for every shipped Linux target:
 - `ctest --preset ...`
 - runtime package generation
 - dev package generation
+- `lua-pslog-<version>-1.rockspec` generation
+- `lua-pslog-<version>-1.src.rock` generation
 - final `libpslog-<version>-CHECKSUMS` generation over every shipped file in `dist/`
 
 Toolchain expectations:
@@ -245,11 +319,11 @@ cmake --preset aarch64-linux-gnu-release
 cmake --build --preset aarch64-linux-gnu-release
 ctest --preset aarch64-linux-gnu-release
 
-cmake --build --preset package-runtime-aarch64-linux-gnu
-cmake --build --preset package-dev-aarch64-linux-gnu
+cmake --build --preset package-archive-aarch64-linux-gnu
 ```
 
-Artifacts are written to `dist/`.
+Each target archive in `dist/` now contains the public headers, the shared
+library, and the static library for that target variant.
 
 After the full matrix runs, `dist/` also contains `libpslog-<version>-CHECKSUMS`
 with `sha256sum` output for every shipped release file except the checksum file

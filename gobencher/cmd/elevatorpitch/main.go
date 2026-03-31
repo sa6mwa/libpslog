@@ -85,6 +85,14 @@ func main() {
 	preparedDynamic := benchmark.NewCPreparedData(dynamicEntries)
 	defer preparedDynamic.Close()
 	preparedStatic := preparedDynamic.PrepareFields(staticFields)
+	var luaAll *benchmark.LuaData
+	var luaDynamic *benchmark.LuaData
+	if benchmark.HasLuaPSLog() {
+		luaAll = benchmark.NewLuaData(entries)
+		luaDynamic = benchmark.NewLuaData(dynamicEntries)
+		defer luaAll.Close()
+		defer luaDynamic.Close()
+	}
 
 	variants := benchmark.Variants()
 	useWith := len(staticFields) > 0
@@ -98,10 +106,8 @@ func main() {
 		{name: "colconGo", run: goRunner(variants[3], dynamicEntries, staticFields, entries, useWith)},
 		{name: "colconC", run: cRunner(variants[3], preparedDynamic, preparedStatic, preparedAll, useWith)},
 	}
-	if benchmark.HasLiblogger() {
-		libloggerData := benchmark.NewLibloggerData(entries)
-		defer libloggerData.Close()
-		runners = append(runners, runner{name: "jsonLiblogger", run: libloggerRunner(libloggerData)})
+	if luaAll != nil && luaDynamic != nil {
+		runners = append(runners, runner{name: "jsonLua", run: luaRunner(luaDynamic, luaAll, staticFields, useWith)})
 	}
 	if *includeQuill && benchmark.HasQuill() {
 		quillData := benchmark.NewQuillData(entries)
@@ -167,17 +173,38 @@ func cRunner(variant benchmark.Variant, dynamic *benchmark.CPreparedData, static
 	}
 }
 
-func libloggerRunner(data *benchmark.LibloggerData) func(context.Context, *runnerMetrics) {
+func luaRunner(dynamic *benchmark.LuaData, all *benchmark.LuaData, staticFields []benchmark.Field, useWith bool) func(context.Context, *runnerMetrics) {
 	return func(ctx context.Context, metrics *runnerMetrics) {
+		activeData := all
+		activeStatic := []benchmark.Field(nil)
+		if useWith {
+			activeData = dynamic
+			activeStatic = staticFields
+		}
+
+		logger, err := benchmark.NewLuaLogger(activeStatic, true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "new Lua logger: %v\n", err)
+			return
+		}
+		defer logger.Close()
+
+		prepared, err := benchmark.PrepareLuaData(logger, activeData)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "prepare Lua benchmark data: %v\n", err)
+			return
+		}
+		defer prepared.Close()
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
 			}
-			result, err := benchmark.RunLiblogger(data, cRunChunk)
+			result, err := benchmark.RunLuaPrepared(logger, prepared, cRunChunk)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "run liblogger benchmark: %v\n", err)
+				fmt.Fprintf(os.Stderr, "run Lua benchmark: %v\n", err)
 				return
 			}
 			metrics.lines.Add(result.Ops)
@@ -762,7 +789,7 @@ func diagramPaletteFor(name string) []diagramColor {
 			{Bar: "\x1b[38;5;136m", Label: "\x1b[38;5;178m", RankBold: "\x1b[1;38;5;230m"},
 			{Bar: "\x1b[38;5;51m", Label: "\x1b[38;5;44m", RankBold: "\x1b[1;38;5;123m"},
 			{Bar: "\x1b[38;5;166m", Label: "\x1b[38;5;208m", RankBold: "\x1b[1;38;5;214m"},
-			{Bar: "\x1b[38;5;108m", Label: "\x1b[38;5;65m", RankBold: "\x1b[1;38;5;152m"},
+				{Bar: "\x1b[38;5;108m", Label: "\x1b[38;5;150m", RankBold: "\x1b[1;38;5;152m"},
 		}
 	case "catppuccin", "catppuccin-mocha":
 		return []diagramColor{

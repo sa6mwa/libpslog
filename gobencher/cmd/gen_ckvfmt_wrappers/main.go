@@ -104,15 +104,18 @@ func loadEmbeddedDataset(path string) ([]string, error) {
 		}
 		for _, spec := range genDecl.Specs {
 			valueSpec, ok := spec.(*ast.ValueSpec)
-			if !ok || len(valueSpec.Names) != 1 || valueSpec.Names[0].Name != "EmbeddedProductionDataset" {
+			if !ok || len(valueSpec.Names) != 1 {
+				continue
+			}
+			if valueSpec.Names[0].Name != "EmbeddedProductionDataset" {
 				continue
 			}
 			if len(valueSpec.Values) != 1 {
-				return nil, fmt.Errorf("unexpected EmbeddedProductionDataset form")
+				return nil, fmt.Errorf("unexpected production dataset form")
 			}
 			composite, ok := valueSpec.Values[0].(*ast.CompositeLit)
 			if !ok {
-				return nil, fmt.Errorf("EmbeddedProductionDataset is not a composite literal")
+				return nil, fmt.Errorf("production dataset is not a composite literal")
 			}
 			lines := make([]string, 0, len(composite.Elts))
 			for _, elt := range composite.Elts {
@@ -129,7 +132,7 @@ func loadEmbeddedDataset(path string) ([]string, error) {
 			return lines, nil
 		}
 	}
-	return nil, fmt.Errorf("EmbeddedProductionDataset not found in %s", filepath.Clean(path))
+	return nil, fmt.Errorf("production dataset not found in %s", filepath.Clean(path))
 }
 
 func parseEntries(lines []string) ([]entry, error) {

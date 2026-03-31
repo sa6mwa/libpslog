@@ -32,7 +32,7 @@ func ComparisonNames() []string {
 		"colconGo",
 		"colconC",
 	}
-	return append(names, libloggerComparisonNames()...)
+	return append(names, luaComparisonNames()...)
 }
 
 func ComparisonNamesWithQuill() []string {

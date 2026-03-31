@@ -20,19 +20,19 @@ require_file() {
 
 run_target() {
     preset="$1"
-    runtime_preset="$2"
-    dev_preset="$3"
+    archive_preset="$2"
 
     printf '\n== %s ==\n' "$preset"
     cmake --preset "$preset"
     cmake --build --preset "$preset"
     ctest --preset "$preset"
-    cmake --build --preset "$runtime_preset"
-    cmake --build --preset "$dev_preset"
+    cmake --build --preset "$archive_preset"
 }
 
 require_command cmake
 require_command ctest
+require_command make
+require_command luarocks
 require_command musl-gcc
 require_command aarch64-linux-gnu-gcc
 require_command arm-linux-gnueabihf-gcc
@@ -49,14 +49,15 @@ cd "$repo_root"
 cmake --preset host
 cmake --build --preset package-clean-dist
 
-run_target linux-gnu-release package-runtime-linux-gnu package-dev-linux-gnu
-run_target linux-musl-release package-runtime-linux-musl package-dev-linux-musl
-run_target aarch64-linux-gnu-release package-runtime-aarch64-linux-gnu package-dev-aarch64-linux-gnu
-run_target aarch64-linux-musl-release package-runtime-aarch64-linux-musl package-dev-aarch64-linux-musl
-run_target armhf-linux-gnu-release package-runtime-armhf-linux-gnu package-dev-armhf-linux-gnu
-run_target armhf-linux-musl-release package-runtime-armhf-linux-musl package-dev-armhf-linux-musl
+run_target linux-gnu-release package-archive-linux-gnu
+run_target linux-musl-release package-archive-linux-musl
+run_target aarch64-linux-gnu-release package-archive-aarch64-linux-gnu
+run_target aarch64-linux-musl-release package-archive-aarch64-linux-musl
+run_target armhf-linux-gnu-release package-archive-armhf-linux-gnu
+run_target armhf-linux-musl-release package-archive-armhf-linux-musl
 
 cmake --build --preset package-single-header
+make release-lua-artifacts
 cmake --build --preset package-checksums
 
 printf '\nLinux release matrix completed successfully.\n'

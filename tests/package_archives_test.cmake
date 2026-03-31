@@ -1,13 +1,12 @@
-set(runtime_archive "${PSLOG_ROOT}/dist/libpslog-${PSLOG_VERSION}-${PSLOG_TARGET_ID}.tar.gz")
-set(dev_archive "${PSLOG_ROOT}/dist/libpslog-${PSLOG_VERSION}-${PSLOG_TARGET_ID}-dev.tar.gz")
+set(archive "${PSLOG_ROOT}/dist/libpslog-${PSLOG_VERSION}-${PSLOG_TARGET_ID}.tar.gz")
 set(single_header "${PSLOG_ROOT}/dist/pslog-${PSLOG_VERSION}.h")
 set(single_header_gz "${single_header}.gz")
 set(checksums_file "${PSLOG_ROOT}/dist/libpslog-${PSLOG_VERSION}-CHECKSUMS")
 
-file(REMOVE "${runtime_archive}" "${dev_archive}" "${single_header}" "${single_header_gz}" "${checksums_file}")
+file(REMOVE "${archive}" "${single_header}" "${single_header_gz}" "${checksums_file}")
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${PSLOG_BINARY_DIR}" --target package-runtime package-dev package-single-header
+    COMMAND "${CMAKE_COMMAND}" --build "${PSLOG_BINARY_DIR}" --target package-archive package-single-header
     RESULT_VARIABLE build_result
 )
 if(NOT build_result EQUAL 0)
@@ -48,6 +47,14 @@ function(assert_archive_layout archive_path)
     if(NOT archive_listing MATCHES "(^|\n)(\\./)?include/pslog_version.h(\n|$)")
         message(FATAL_ERROR "archive missing include/pslog_version.h: ${archive_path}")
     endif()
+    string(REPLACE "." "\\." shared_lib_regex "${PSLOG_SHARED_LIB_NAME}")
+    if(NOT archive_listing MATCHES "(^|\n)(\\./)?lib/${shared_lib_regex}(\n|$)")
+        message(FATAL_ERROR "archive missing shared library lib/${PSLOG_SHARED_LIB_NAME}: ${archive_path}")
+    endif()
+    string(REPLACE "." "\\." static_lib_regex "${PSLOG_STATIC_LIB_NAME}")
+    if(NOT archive_listing MATCHES "(^|\n)(\\./)?lib/${static_lib_regex}(\n|$)")
+        message(FATAL_ERROR "archive missing static library lib/${PSLOG_STATIC_LIB_NAME}: ${archive_path}")
+    endif()
     if(archive_listing MATCHES "(^|\n)(\\./)?share/libpslog(/|\n|$)")
         message(FATAL_ERROR "archive still contains legacy share/libpslog path: ${archive_path}")
     endif()
@@ -60,10 +67,10 @@ function(assert_archive_layout archive_path)
     if(DEFINED PSLOG_SHARED_SONAME
        AND NOT PSLOG_SHARED_SONAME STREQUAL ""
        AND NOT PSLOG_SHARED_SONAME STREQUAL PSLOG_SHARED_LIB_NAME
-       AND archive_path STREQUAL runtime_archive)
+       AND archive_path STREQUAL archive)
         string(REPLACE "." "\\." shared_soname_regex "${PSLOG_SHARED_SONAME}")
         if(NOT archive_listing MATCHES "(^|\n)(\\./)?lib/${shared_soname_regex}(\n|$)")
-            message(FATAL_ERROR "runtime archive missing shared-library SONAME entry lib/${PSLOG_SHARED_SONAME}: ${archive_path}")
+            message(FATAL_ERROR "archive missing shared-library SONAME entry lib/${PSLOG_SHARED_SONAME}: ${archive_path}")
         endif()
     endif()
 
@@ -74,8 +81,7 @@ function(assert_archive_layout archive_path)
     endif()
 endfunction()
 
-assert_archive_layout("${runtime_archive}")
-assert_archive_layout("${dev_archive}")
+assert_archive_layout("${archive}")
 
 if(NOT EXISTS "${single_header}")
     message(FATAL_ERROR "missing single-header artifact: ${single_header}")

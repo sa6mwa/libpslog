@@ -1,3 +1,5 @@
 /build/
 /dist/
+/gobencher/benchmark/production_data_generated.go
+/gobencher/benchmark/cpslog_kvfmt_generated.go
 *.out

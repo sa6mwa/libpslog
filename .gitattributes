@@ -1,0 +1,5 @@
+dist/ export-ignore
+build/ export-ignore
+performance-logs/ export-ignore
+demo.gif export-ignore
+elevatorpitch.gif export-ignore

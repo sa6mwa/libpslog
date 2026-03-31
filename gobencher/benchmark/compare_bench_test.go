@@ -21,6 +21,8 @@ var (
 	benchRaw           *CRawData
 	benchRawDyn        *CRawData
 	benchRawWith       CRawFields
+	benchLua           *LuaData
+	benchLuaDyn        *LuaData
 	benchLiblogger     *LibloggerData
 	benchQuill         *QuillData
 	benchDataLoadError error
@@ -47,6 +49,10 @@ func loadBenchData() {
 	benchRaw = NewCRawData(benchEntries)
 	benchRawDyn = NewCRawData(benchDynamic)
 	benchRawWith = benchRawDyn.PrepareFields(benchStaticFields)
+	if HasLuaPSLog() {
+		benchLua = NewLuaData(benchEntries)
+		benchLuaDyn = NewLuaData(benchDynamic)
+	}
 	if HasLiblogger() {
 		benchLiblogger = NewLibloggerData(benchEntries)
 	}
@@ -255,6 +261,41 @@ func BenchmarkProductionCompare(b *testing.B) {
 		})
 	}
 
+	if HasLuaPSLog() {
+		b.Run("jsonLua", func(b *testing.B) {
+			activeData := benchLua
+			staticFields := []Field(nil)
+			if len(benchStaticFields) > 0 {
+				activeData = benchLuaDyn
+				staticFields = benchStaticFields
+			}
+			logger, err := NewLuaLogger(staticFields, true)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer logger.Close()
+
+			prepared, err := PrepareLuaData(logger, activeData)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer prepared.Close()
+
+			result, err := RunLuaPrepared(logger, prepared, b.N)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if result.BytesWritten == 0 {
+				b.Fatal("jsonLua wrote zero bytes")
+			}
+			if result.Ops == 0 {
+				b.Fatal("jsonLua reported zero ops")
+			}
+			b.ReportMetric(float64(result.Elapsed.Nanoseconds())/float64(result.Ops), "c_ns/op")
+			b.ReportMetric(float64(result.BytesWritten)/float64(result.Ops), "bytes/op")
+		})
+	}
+
 	if HasLiblogger() {
 		b.Run("jsonLiblogger", func(b *testing.B) {
 			result, err := RunLiblogger(benchLiblogger, b.N)
@@ -294,11 +335,15 @@ func BenchmarkFixedCompare(b *testing.B) {
 	prepared := NewCPreparedData(entries)
 	kvfmt, err := NewCKVFmtData(entries)
 	raw := NewCRawData(entries)
+	luaData := NewLuaData(entries)
 	libloggerData := NewLibloggerData(entries)
 	quillData := NewQuillData(entries)
 	defer prepared.Close()
 	defer kvfmt.Close()
 	defer raw.Close()
+	if luaData != nil {
+		defer luaData.Close()
+	}
 	if libloggerData != nil {
 		defer libloggerData.Close()
 	}
@@ -425,6 +470,35 @@ func BenchmarkFixedCompare(b *testing.B) {
 			}
 			if result.Ops == 0 {
 				b.Fatalf("%sCraw reported zero ops", variant.Name)
+			}
+			b.ReportMetric(float64(result.Elapsed.Nanoseconds())/float64(result.Ops), "c_ns/op")
+			b.ReportMetric(float64(result.BytesWritten)/float64(result.Ops), "bytes/op")
+		})
+	}
+
+	if HasLuaPSLog() {
+		b.Run("jsonLua", func(b *testing.B) {
+			logger, err := NewLuaLogger(nil, true)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer logger.Close()
+
+			prepared, err := PrepareLuaData(logger, luaData)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer prepared.Close()
+
+			result, err := RunLuaPrepared(logger, prepared, b.N)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if result.BytesWritten == 0 {
+				b.Fatal("jsonLua wrote zero bytes")
+			}
+			if result.Ops == 0 {
+				b.Fatal("jsonLua reported zero ops")
 			}
 			b.ReportMetric(float64(result.Elapsed.Nanoseconds())/float64(result.Ops), "c_ns/op")
 			b.ReportMetric(float64(result.BytesWritten)/float64(result.Ops), "bytes/op")

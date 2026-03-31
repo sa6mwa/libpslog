@@ -5,6 +5,8 @@ set(checksums_path "${dist_dir}/${checksums_name}")
 file(MAKE_DIRECTORY "${dist_dir}")
 file(GLOB release_entries RELATIVE "${dist_dir}"
     "${dist_dir}/libpslog-${PSLOG_VERSION}-*"
+    "${dist_dir}/lua-pslog-${PSLOG_VERSION}-*.rockspec"
+    "${dist_dir}/lua-pslog-${PSLOG_VERSION}-*.src.rock"
     "${dist_dir}/pslog-${PSLOG_VERSION}.h.gz"
 )
 

@@ -2292,6 +2292,57 @@ static int test_with_level_controls(void) {
   return 0;
 }
 
+static int test_constructor_with_level_field_matches_derived_logger(void) {
+  struct memory_sink ctor_sink;
+  struct memory_sink derived_sink;
+  pslog_config config;
+  pslog_logger *ctor_log;
+  pslog_logger *root;
+  pslog_logger *derived;
+  pslog_field field;
+
+  reset_sink(&ctor_sink);
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_JSON;
+  config.color = PSLOG_COLOR_NEVER;
+  config.timestamps = 0;
+  config.min_level = PSLOG_LEVEL_WARN;
+  config.with_level_field = 1;
+  config.output.write = memory_sink_write;
+  config.output.close = NULL;
+  config.output.isatty = memory_sink_isatty;
+  config.output.userdata = &ctor_sink;
+  ctor_log = pslog_new(&config);
+  TEST_ASSERT(ctor_log != NULL);
+
+  field = pslog_str("service", "api");
+  ctor_log->error(ctor_log, "ctor", &field, 1u);
+
+  TEST_ASSERT(contains_text(ctor_sink.data, "\"msg\":\"ctor\""));
+  TEST_ASSERT(contains_text(ctor_sink.data, "\"service\":\"api\""));
+  TEST_ASSERT(contains_text(ctor_sink.data, "\"lvl\":\"error\""));
+  TEST_ASSERT(contains_text(ctor_sink.data, "\"loglevel\":\"warn\""));
+  TEST_ASSERT(assert_valid_json_lines(ctor_sink.data) == 0);
+
+  reset_sink(&derived_sink);
+  config.with_level_field = 0;
+  config.output.userdata = &derived_sink;
+  root = pslog_new(&config);
+  TEST_ASSERT(root != NULL);
+  derived = root->with_level_field(root);
+  TEST_ASSERT(derived != NULL);
+
+  field = pslog_str("service", "api");
+  derived->error(derived, "ctor", &field, 1u);
+
+  TEST_ASSERT(strcmp(ctor_sink.data, derived_sink.data) == 0);
+
+  derived->destroy(derived);
+  root->destroy(root);
+  ctor_log->destroy(ctor_log);
+  return 0;
+}
+
 static int test_new_from_env(void) {
   struct memory_sink sink;
   pslog_config config;
@@ -5432,6 +5483,9 @@ int main(void) {
     return 1;
   }
   if (test_with_level_controls() != 0) {
+    return 1;
+  }
+  if (test_constructor_with_level_field_matches_derived_logger() != 0) {
     return 1;
   }
   if (test_new_from_env() != 0) {

@@ -202,7 +202,7 @@ list(JOIN CMAKE_CROSSCOMPILING_EMULATOR "|" PSLOG_CROSSCOMPILING_EMULATOR_ARG)
 
 set(PSLOG_BENCH_SUPPORT_SOURCES
     bench/bench_fixture.c
-    bench/bench_production_data_generated.c
+    bench/bench_production_dataset.c
 )
 
 add_library(pslog_shared SHARED ${PSLOG_SOURCES})
@@ -262,6 +262,15 @@ set_target_properties(pslog_static PROPERTIES
 
 if(PSLOG_BUILD_TESTS)
     enable_testing()
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" PSLOG_TEST_BUILD_TYPE_UPPER)
+    set(PSLOG_TEST_C_FLAGS "${CMAKE_C_FLAGS}")
+    if(DEFINED CMAKE_C_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER})
+        string(APPEND PSLOG_TEST_C_FLAGS " ${CMAKE_C_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER}}")
+    endif()
+    set(PSLOG_TEST_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+    if(DEFINED CMAKE_EXE_LINKER_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER})
+        string(APPEND PSLOG_TEST_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER}}")
+    endif()
     add_executable(pslog_tests
         tests/test_main.c
         ${PSLOG_BENCH_SUPPORT_SOURCES}
@@ -302,6 +311,7 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
             -DPSLOG_TARGET_ID=${PSLOG_TARGET_ID}
+            -DPSLOG_STATIC_LIB_NAME=$<TARGET_FILE_NAME:pslog_static>
             -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
             -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_archives_test.cmake
@@ -334,6 +344,8 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
+            -DPSLOG_C_FLAGS=${PSLOG_TEST_C_FLAGS}
+            -DPSLOG_EXE_LINKER_FLAGS=${PSLOG_TEST_EXE_LINKER_FLAGS}
             -DPSLOG_THREAD_LIBS=${CMAKE_THREAD_LIBS_INIT}
             -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
             -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
@@ -466,23 +478,7 @@ install(TARGETS pslog_static
     ARCHIVE DESTINATION lib
 )
 
-add_custom_target(package-runtime
-    COMMAND ${CMAKE_COMMAND}
-        -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
-        -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-        -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
-        -DPSLOG_TARGET_ID=${PSLOG_TARGET_ID}
-        -DPSLOG_PUBLIC_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/pslog.h
-        -DPSLOG_PUBLIC_VERSION_HEADER=${PSLOG_GENERATED_VERSION_HEADER}
-        -DPSLOG_SHARED_LIB=$<TARGET_FILE:pslog_shared>
-        -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
-        -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_runtime.cmake
-    DEPENDS pslog_shared
-    VERBATIM
-)
-
-add_custom_target(package-dev
+add_custom_target(package-archive
     COMMAND ${CMAKE_COMMAND}
         -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
         -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -491,8 +487,12 @@ add_custom_target(package-dev
         -DPSLOG_PUBLIC_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/pslog.h
         -DPSLOG_PUBLIC_VERSION_HEADER=${PSLOG_GENERATED_VERSION_HEADER}
         -DPSLOG_STATIC_LIB=$<TARGET_FILE:pslog_static>
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_dev.cmake
-    DEPENDS pslog_static
+        -DPSLOG_SHARED_LIB=$<TARGET_FILE:pslog_shared>
+        -DPSLOG_STATIC_LIB_NAME=$<TARGET_FILE_NAME:pslog_static>
+        -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
+        -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_archive.cmake
+    DEPENDS pslog_shared pslog_static
     VERBATIM
 )
 

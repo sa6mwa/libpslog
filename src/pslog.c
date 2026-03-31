@@ -239,6 +239,7 @@ void pslog_default_config(pslog_config *config) {
   config->min_level = PSLOG_LEVEL_DEBUG;
   config->timestamps = 1;
   config->utc = 0;
+  config->with_level_field = 0;
   config->verbose_fields = 0;
   config->time_format = NULL;
   config->palette = pslog_palette_default();
@@ -1284,6 +1285,8 @@ pslog_logger *pslog_new(const pslog_config *config) {
   pslog_config effective;
   pslog_shared_state *shared;
   pslog_logger *logger;
+  pslog_logger_impl *impl;
+  char *time_format_storage;
 
   pslog_default_config(&effective);
   if (config != NULL) {
@@ -1323,7 +1326,20 @@ pslog_logger *pslog_new(const pslog_config *config) {
   shared->verbose_fields = effective.verbose_fields;
   shared->palette =
       effective.palette != NULL ? effective.palette : pslog_palette_default();
-  shared->time_format = effective.time_format;
+  time_format_storage = NULL;
+  if (effective.time_format != NULL) {
+    size_t time_format_len = strlen(effective.time_format) + 1u;
+
+    time_format_storage =
+        (char *)pslog_memdup_local(effective.time_format, time_format_len);
+    if (time_format_storage == NULL) {
+      pslog_release_shared(shared);
+      return NULL;
+    }
+  }
+  shared->time_format_storage = time_format_storage;
+  shared->time_format =
+      time_format_storage != NULL ? time_format_storage : effective.time_format;
   shared->time_now = pslog_default_time_now;
   shared->time_now_userdata = NULL;
   shared->palette_key_len = pslog_cstr_len_or_zero(shared->palette->key);
@@ -1380,6 +1396,8 @@ pslog_logger *pslog_new(const pslog_config *config) {
     pslog_release_shared(shared);
     return NULL;
   }
+  impl = (pslog_logger_impl *)logger->impl;
+  impl->include_level_field = effective.with_level_field ? 1 : 0;
   return logger;
 }
 
@@ -2422,6 +2440,8 @@ void pslog_release_shared(pslog_shared_state *shared) {
   for (i = 0u; i < PSLOG_KVFMT_CACHE_SIZE; ++i) {
     pslog_reset_kvfmt_cache_entry(&shared->kvfmt_cache[i]);
   }
+  pslog_free_internal(shared->time_format_storage);
+  shared->time_format_storage = NULL;
   pslog_free_internal(shared->kvfmt_ptr_cache);
   shared->kvfmt_ptr_cache = NULL;
   pslog_mutex_destroy(&shared->output_mutex);

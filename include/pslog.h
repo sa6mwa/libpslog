@@ -4,7 +4,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#if !defined(PSLOG_VERSION_MAJOR) || !defined(PSLOG_VERSION_MINOR) || \
+    !defined(PSLOG_VERSION_PATCH) || !defined(PSLOG_VERSION_STRING)
 #include "pslog_version.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -438,6 +441,14 @@ typedef struct pslog_config {
   int timestamps;
   /** Non-zero to render timestamps in UTC. */
   int utc;
+  /**
+   * Non-zero to emit the effective logger threshold as `loglevel`.
+   *
+   * This is equivalent to calling `with_level_field()` on the newly created
+   * logger, but avoids creating an extra derived logger when the behavior
+   * should apply from construction time.
+   */
+  int with_level_field;
   /**
    * Non-zero to use verbose built-in metadata field names.
    *
