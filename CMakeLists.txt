@@ -310,11 +310,12 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
-            -DPSLOG_TARGET_ID=${PSLOG_TARGET_ID}
-            -DPSLOG_STATIC_LIB_NAME=$<TARGET_FILE_NAME:pslog_static>
-            -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
-            -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_archives_test.cmake
+        -DPSLOG_TARGET_ID=${PSLOG_TARGET_ID}
+        -DPSLOG_STATIC_LIB_NAME=$<TARGET_FILE_NAME:pslog_static>
+        -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
+        -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
+        -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_archives_test.cmake
     )
     set_tests_properties(package_archives_test PROPERTIES RUN_SERIAL TRUE)
     add_test(NAME version_resolution_test
@@ -490,6 +491,7 @@ add_custom_target(package-archive
         -DPSLOG_SHARED_LIB=$<TARGET_FILE:pslog_shared>
         -DPSLOG_STATIC_LIB_NAME=$<TARGET_FILE_NAME:pslog_static>
         -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
+        -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_archive.cmake
     DEPENDS pslog_shared pslog_static

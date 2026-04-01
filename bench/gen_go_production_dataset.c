@@ -90,8 +90,8 @@ static void write_json_field_value(FILE *out, const bench_field_spec *field) {
     fputs("null", out);
     break;
   case BENCH_FIELD_STRING:
-    write_go_json_string(out,
-                         field->string_value != NULL ? field->string_value : "");
+    write_go_json_string(out, field->string_value != NULL ? field->string_value
+                                                          : "");
     break;
   case BENCH_FIELD_BOOL:
     fputs(field->bool_value ? "true" : "false", out);

@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#if !defined(PSLOG_VERSION_MAJOR) || !defined(PSLOG_VERSION_MINOR) || \
+#if !defined(PSLOG_VERSION_MAJOR) || !defined(PSLOG_VERSION_MINOR) ||          \
     !defined(PSLOG_VERSION_PATCH) || !defined(PSLOG_VERSION_STRING)
 #include "pslog_version.h"
 #endif
