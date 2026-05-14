@@ -24,7 +24,7 @@
 
 ## Release Targets
 
-First-release Linux support is:
+First-release binary support is:
 
 - `x86_64-linux-gnu`
 - `x86_64-linux-musl`
@@ -32,15 +32,17 @@ First-release Linux support is:
 - `aarch64-linux-musl`
 - `armhf-linux-gnu`
 - `armhf-linux-musl`
+- `arm64-apple-darwin`
 
-All six are wired for:
+All targets are wired for:
 
 - configure/build via CMake presets
-- tests
+- tests where the target can run locally or under qemu
 - runtime package generation
 - dev package generation
 
-For ARM targets, the test presets run under qemu.
+For Linux ARM targets, the test presets run under qemu. The Darwin target is a
+build-and-package target for osxcross.
 
 ## API Overview
 
@@ -286,9 +288,9 @@ cmake --build --preset fuzz
 ./build/fuzz/pslog_fuzz -runs=1000
 ```
 
-## Linux Release Matrix
+## Release Matrix
 
-One-command sweep for the full shipped Linux matrix:
+One-command sweep for the full shipped matrix:
 
 ```sh
 ./scripts/run_linux_release_matrix.sh
@@ -305,12 +307,16 @@ That script runs, for every shipped Linux target:
 - `lua-pslog-<version>-1.src.rock` generation
 - final `libpslog-<version>-CHECKSUMS` generation over every shipped file in `dist/`
 
+When the osxcross arm64 Darwin compiler is available, the script also builds
+and packages `arm64-apple-darwin`.
+
 Toolchain expectations:
 
 - `linux-gnu` cross presets expect distro cross compilers such as `aarch64-linux-gnu-gcc` and `arm-linux-gnueabihf-gcc`.
 - `x86_64-linux-musl` expects host `musl-gcc`.
 - `aarch64-linux-musl` and `armhf-linux-musl` expect real musl cross compilers such as `aarch64-linux-musl-gcc` and `arm-linux-musleabihf-gcc`.
 - musl ARM qemu runs expect the musl loader symlink in the target sysroot to resolve within the prefix, for example `ld-musl-aarch64.so.1 -> libc.so`.
+- `arm64-apple-darwin` expects osxcross under `OSXCROSS_ROOT` or `$HOME/.local/cross/osxcross`.
 
 Single-target examples:
 

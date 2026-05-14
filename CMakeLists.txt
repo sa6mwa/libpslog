@@ -27,6 +27,9 @@ function(pslog_configure_c_target target)
     if(UNIX OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
         target_compile_definitions(${target} PRIVATE _POSIX_C_SOURCE=200809L)
     endif()
+    if(APPLE)
+        target_compile_definitions(${target} PRIVATE _DARWIN_C_SOURCE=1)
+    endif()
     if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(${target} PRIVATE
             -std=c89
@@ -173,7 +176,10 @@ if(PSLOG_TARGET_OS_LOWER STREQUAL "linux" AND NOT PSLOG_TARGET_LIBC)
     set(PSLOG_TARGET_LIBC "gnu")
 endif()
 
-if(PSLOG_TARGET_OS_LOWER STREQUAL "darwin")
+if(PSLOG_TARGET_OS_LOWER STREQUAL "darwin" AND
+   PSLOG_TARGET_ARCH_LOWER STREQUAL "aarch64")
+    set(PSLOG_TARGET_ID "arm64-apple-darwin")
+elseif(PSLOG_TARGET_OS_LOWER STREQUAL "darwin")
     set(PSLOG_TARGET_ID "${PSLOG_TARGET_ARCH_LOWER}-darwin")
 elseif(PSLOG_TARGET_OS_LOWER STREQUAL "freebsd")
     set(PSLOG_TARGET_ID "${PSLOG_TARGET_ARCH_LOWER}-freebsd")
@@ -285,6 +291,9 @@ if(PSLOG_BUILD_TESTS)
     if(UNIX OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
         target_compile_definitions(pslog_tests PRIVATE _POSIX_C_SOURCE=200809L)
     endif()
+    if(APPLE)
+        target_compile_definitions(pslog_tests PRIVATE _DARWIN_C_SOURCE=1)
+    endif()
     target_link_libraries(pslog_tests PRIVATE pslog_test_static jansson)
     pslog_enable_coverage_if_requested(pslog_tests)
     add_test(NAME pslog_tests COMMAND pslog_tests)
@@ -300,6 +309,9 @@ if(PSLOG_BUILD_TESTS)
     target_compile_definitions(pslog_single_header_tests PRIVATE PSLOG_TEST_HOOKS=1)
     if(UNIX OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
         target_compile_definitions(pslog_single_header_tests PRIVATE _POSIX_C_SOURCE=200809L)
+    endif()
+    if(APPLE)
+        target_compile_definitions(pslog_single_header_tests PRIVATE _DARWIN_C_SOURCE=1)
     endif()
     target_link_libraries(pslog_single_header_tests PRIVATE Threads::Threads jansson)
     add_dependencies(pslog_single_header_tests package-single-header)
@@ -325,6 +337,13 @@ if(PSLOG_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/version_resolution_test.cmake
     )
     set_tests_properties(version_resolution_test PROPERTIES RUN_SERIAL TRUE)
+    add_test(NAME release_privacy_gate_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_privacy_gate_test.cmake
+    )
+    set_tests_properties(release_privacy_gate_test PROPERTIES RUN_SERIAL TRUE)
     add_test(NAME c_only_configure_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -493,6 +512,7 @@ add_custom_target(package-archive
         -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
+        -DPSLOG_STRIP=${CMAKE_STRIP}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_archive.cmake
     DEPENDS pslog_shared pslog_static
     VERBATIM
@@ -521,6 +541,15 @@ add_custom_target(package-checksums
         -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
         -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_checksums.cmake
+    VERBATIM
+)
+
+add_custom_target(package-privacy-gate
+    COMMAND ${CMAKE_COMMAND}
+        -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+        -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_release_privacy.cmake
     VERBATIM
 )
 

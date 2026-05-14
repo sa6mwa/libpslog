@@ -1,0 +1,114 @@
+set(CMAKE_SYSTEM_NAME Darwin)
+set(CMAKE_SYSTEM_PROCESSOR arm64)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+if(DEFINED ENV{OSXCROSS_ROOT} AND NOT "$ENV{OSXCROSS_ROOT}" STREQUAL "")
+    set(PSLOG_OSXCROSS_ROOT "$ENV{OSXCROSS_ROOT}")
+elseif(DEFINED ENV{HOME} AND NOT "$ENV{HOME}" STREQUAL "")
+    set(PSLOG_OSXCROSS_ROOT "$ENV{HOME}/.local/cross/osxcross")
+else()
+    message(FATAL_ERROR "OSXCROSS_ROOT is not set and HOME is unavailable")
+endif()
+
+set(PSLOG_OSXCROSS_BIN_DIR "${PSLOG_OSXCROSS_ROOT}/bin")
+if(NOT DEFINED PSLOG_OSXCROSS_HOST OR PSLOG_OSXCROSS_HOST STREQUAL "")
+    file(GLOB _pslog_osxcross_clangs LIST_DIRECTORIES false
+         "${PSLOG_OSXCROSS_BIN_DIR}/arm64-apple-darwin*-clang")
+    list(SORT _pslog_osxcross_clangs)
+    list(REVERSE _pslog_osxcross_clangs)
+    foreach(_pslog_osxcross_clang IN LISTS _pslog_osxcross_clangs)
+        if(NOT DEFINED PSLOG_OSXCROSS_HOST OR PSLOG_OSXCROSS_HOST STREQUAL "")
+            get_filename_component(_pslog_osxcross_clang_name
+                "${_pslog_osxcross_clang}" NAME)
+            string(REGEX REPLACE "-clang$" "" PSLOG_OSXCROSS_HOST
+                "${_pslog_osxcross_clang_name}")
+        endif()
+    endforeach()
+endif()
+if(NOT DEFINED PSLOG_OSXCROSS_HOST OR PSLOG_OSXCROSS_HOST STREQUAL "")
+    message(FATAL_ERROR
+        "failed to find arm64 Apple Darwin osxcross clang under "
+        "${PSLOG_OSXCROSS_BIN_DIR}. Set PSLOG_OSXCROSS_HOST explicitly or "
+        "install an arm64-apple-darwin*-clang tool.")
+endif()
+set(PSLOG_OSXCROSS_HOST "${PSLOG_OSXCROSS_HOST}" CACHE STRING
+    "osxcross target host triple")
+set(PSLOG_MACOS_DEPLOYMENT_TARGET "15.0" CACHE STRING
+    "Minimum macOS deployment target")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "${PSLOG_MACOS_DEPLOYMENT_TARGET}"
+    CACHE STRING "" FORCE)
+
+set(ENV{PATH} "${PSLOG_OSXCROSS_BIN_DIR}:$ENV{PATH}")
+set(CMAKE_C_COMPILER
+    "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-clang"
+    CACHE FILEPATH "")
+set(CMAKE_AR
+    "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-ar"
+    CACHE FILEPATH "")
+set(CMAKE_RANLIB
+    "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-ranlib"
+    CACHE FILEPATH "")
+set(CMAKE_LINKER
+    "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-ld"
+    CACHE FILEPATH "")
+set(CMAKE_INSTALL_NAME_TOOL
+    "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-install_name_tool"
+    CACHE FILEPATH "")
+set(CMAKE_STRIP
+    "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-strip"
+    CACHE FILEPATH "")
+
+foreach(_pslog_required_tool
+        CMAKE_C_COMPILER
+        CMAKE_AR
+        CMAKE_RANLIB
+        CMAKE_LINKER
+        CMAKE_INSTALL_NAME_TOOL
+        CMAKE_STRIP)
+    if(NOT EXISTS "${${_pslog_required_tool}}")
+        message(FATAL_ERROR
+            "The arm64 Apple Darwin osxcross toolchain is missing "
+            "${_pslog_required_tool}: ${${_pslog_required_tool}}. "
+            "Set OSXCROSS_ROOT or install osxcross under "
+            "$HOME/.local/cross/osxcross.")
+    endif()
+endforeach()
+
+set(_pslog_darwin_linker_flag "--ld-path=${CMAKE_LINKER}")
+foreach(_pslog_linker_flags
+        CMAKE_EXE_LINKER_FLAGS
+        CMAKE_SHARED_LINKER_FLAGS
+        CMAKE_MODULE_LINKER_FLAGS)
+    if(NOT "${${_pslog_linker_flags}}" MATCHES "(^| )(-fuse-ld=|--ld-path=)")
+        set(${_pslog_linker_flags}
+            "${_pslog_darwin_linker_flag} ${${_pslog_linker_flags}}"
+            CACHE STRING "" FORCE)
+    endif()
+endforeach()
+
+file(GLOB _pslog_osxcross_sdks LIST_DIRECTORIES true
+     "${PSLOG_OSXCROSS_ROOT}/SDK/MacOSX*.sdk")
+if(NOT _pslog_osxcross_sdks)
+    message(FATAL_ERROR
+        "failed to locate a usable osxcross macOS SDK under "
+        "${PSLOG_OSXCROSS_ROOT}/SDK")
+endif()
+list(SORT _pslog_osxcross_sdks)
+list(REVERSE _pslog_osxcross_sdks)
+list(GET _pslog_osxcross_sdks 0 PSLOG_OSXCROSS_SDK)
+if(NOT EXISTS "${PSLOG_OSXCROSS_SDK}/usr/include")
+    message(FATAL_ERROR
+        "failed to locate a usable osxcross macOS SDK under "
+        "${PSLOG_OSXCROSS_ROOT}/SDK")
+endif()
+
+set(CMAKE_OSX_SYSROOT "${PSLOG_OSXCROSS_SDK}" CACHE PATH "" FORCE)
+set(CMAKE_FIND_ROOT_PATH "${PSLOG_OSXCROSS_SDK}")
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+set(PSLOG_TARGET_ARCH arm64 CACHE STRING "" FORCE)
+set(PSLOG_TARGET_OS darwin CACHE STRING "" FORCE)
+set(PSLOG_TARGET_LIBC "" CACHE STRING "" FORCE)

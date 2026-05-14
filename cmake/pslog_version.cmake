@@ -30,9 +30,9 @@ else()
     endif()
 endif()
 
-if(NOT _pslog_resolved_version MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$")
+if(NOT _pslog_resolved_version MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?$")
     message(FATAL_ERROR
-        "invalid libpslog version '${_pslog_resolved_version}'; expected X.Y.Z with optional prerelease/build metadata")
+        "invalid libpslog version '${_pslog_resolved_version}'; expected X.Y.Z with optional prerelease metadata")
 endif()
 
 set(PSLOG_RESOLVED_VERSION "${_pslog_resolved_version}")

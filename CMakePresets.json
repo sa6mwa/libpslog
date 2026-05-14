@@ -72,6 +72,11 @@
       "toolchainFile": "${sourceDir}/cmake/toolchains/linux-armhf-musl.cmake"
     },
     {
+      "name": "arm64-apple-darwin-release",
+      "inherits": "host",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/arm64-apple-darwin.cmake"
+    },
+    {
       "name": "asan",
       "inherits": "debug",
       "cacheVariables": {
@@ -171,6 +176,10 @@
       "configurePreset": "armhf-linux-musl-release"
     },
     {
+      "name": "arm64-apple-darwin-release",
+      "configurePreset": "arm64-apple-darwin-release"
+    },
+    {
       "name": "package-archive",
       "configurePreset": "host",
       "targets": [
@@ -220,6 +229,13 @@
       ]
     },
     {
+      "name": "package-archive-arm64-apple-darwin",
+      "configurePreset": "arm64-apple-darwin-release",
+      "targets": [
+        "package-archive"
+      ]
+    },
+    {
       "name": "package-single-header",
       "configurePreset": "host",
       "targets": [
@@ -231,6 +247,13 @@
       "configurePreset": "host",
       "targets": [
         "package-checksums"
+      ]
+    },
+    {
+      "name": "package-privacy-gate",
+      "configurePreset": "host",
+      "targets": [
+        "package-privacy-gate"
       ]
     },
     {

@@ -13,7 +13,8 @@ RELEASE_BUILD_PRESETS := \
 	aarch64-linux-gnu-release \
 	aarch64-linux-musl-release \
 	armhf-linux-gnu-release \
-	armhf-linux-musl-release
+	armhf-linux-musl-release \
+	$(shell osxcross_bin="$${OSXCROSS_ROOT:-$$HOME/.local/cross/osxcross}/bin"; for cc in "$$osxcross_bin"/arm64-apple-darwin*-clang; do if [ -x "$$cc" ]; then printf '%s' arm64-apple-darwin-release; break; fi; done)
 
 CROSS_RELEASE_PRESETS := \
 	aarch64-linux-gnu-release \
@@ -24,7 +25,10 @@ LUA_RELEASE_VERSION := $(shell ./lua/scripts/release_version.sh)
 LUA_DIST_DIR := $(CURDIR)/dist
 LUA_RELEASE_ROCKSPEC := $(LUA_DIST_DIR)/lua-pslog-$(LUA_RELEASE_VERSION)-1.rockspec
 LUA_RELEASE_PACK_DIR := $(LUA_DIST_DIR)/.lua-pack
-LUA_RELEASE_STAGE_DIR := $(LUA_RELEASE_PACK_DIR)/src
+LUA_RELEASE_STAGE_NAME := lua-pslog-$(LUA_RELEASE_VERSION)
+LUA_RELEASE_STAGE_DIR := $(LUA_RELEASE_PACK_DIR)/$(LUA_RELEASE_STAGE_NAME)
+LUA_RELEASE_PACK_SOURCE_TAR := $(LUA_RELEASE_PACK_DIR)/$(LUA_RELEASE_STAGE_NAME).tar
+LUA_RELEASE_PACK_SOURCE_TARBALL := $(LUA_RELEASE_PACK_SOURCE_TAR).gz
 LUA_RELEASE_PACK_ROCKSPEC := $(LUA_RELEASE_PACK_DIR)/lua-pslog-$(LUA_RELEASE_VERSION)-1.rockspec
 LUA_RELEASE_ROCK := $(LUA_DIST_DIR)/lua-pslog-$(LUA_RELEASE_VERSION)-1.src.rock
 LUA_ROCK_TREE := build/luarocks
@@ -194,22 +198,24 @@ $(LUA_RELEASE_STAGE_DIR): Makefile .git/index | $(LUA_RELEASE_PACK_DIR)
 	rm -rf "$(LUA_RELEASE_STAGE_DIR)"
 	mkdir -p "$(LUA_RELEASE_STAGE_DIR)"
 	git archive --format=tar --worktree-attributes HEAD | tar -xf - -C "$(LUA_RELEASE_STAGE_DIR)"
-	git -C "$(LUA_RELEASE_STAGE_DIR)" init -q
-	git -C "$(LUA_RELEASE_STAGE_DIR)" config user.name "libpslog release pack"
-	git -C "$(LUA_RELEASE_STAGE_DIR)" config user.email "release@libpslog.local"
-	git -C "$(LUA_RELEASE_STAGE_DIR)" add .
-	git -C "$(LUA_RELEASE_STAGE_DIR)" commit -q -m "stage lua release sources"
 
 $(LUA_RELEASE_ROCKSPEC): $(LUA_ROCK_SOURCES) Makefile | $(LUA_DIST_DIR)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_RELEASE_ROCKSPEC)"
 
 $(LUA_RELEASE_PACK_ROCKSPEC): Makefile $(LUA_RELEASE_STAGE_DIR)
-	cd "$(LUA_RELEASE_STAGE_DIR)" && ./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "../$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))" "git+file://$(LUA_RELEASE_STAGE_DIR)" ""
+	cd "$(LUA_RELEASE_STAGE_DIR)" && ./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "../$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))" "file://$(LUA_RELEASE_PACK_SOURCE_TARBALL)" ""
 
 $(LUA_RELEASE_ROCK): $(LUA_RELEASE_PACK_ROCKSPEC) $(LUA_RELEASE_ROCKSPEC)
 	rm -f "$(LUA_RELEASE_ROCK)"
-	cd "$(LUA_RELEASE_STAGE_DIR)" && luarocks pack "../$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))"
-	mv "$(LUA_RELEASE_STAGE_DIR)/$(notdir $(LUA_RELEASE_ROCK))" "$(LUA_RELEASE_ROCK)"
+	rm -f "$(LUA_RELEASE_PACK_SOURCE_TAR)" "$(LUA_RELEASE_PACK_SOURCE_TARBALL)"
+	cd "$(LUA_RELEASE_PACK_DIR)" && tar -cf "$(notdir $(LUA_RELEASE_PACK_SOURCE_TAR))" "$(LUA_RELEASE_STAGE_NAME)"
+	gzip -9 -f "$(LUA_RELEASE_PACK_SOURCE_TAR)"
+	cd "$(LUA_RELEASE_PACK_DIR)" && luarocks pack "$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))"
+	mv "$(LUA_RELEASE_PACK_DIR)/$(notdir $(LUA_RELEASE_ROCK))" "$(LUA_RELEASE_ROCK)"
+	@tmp_dir="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp_dir"' EXIT; \
+	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$$tmp_dir/$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))" "file://$(notdir $(LUA_RELEASE_PACK_SOURCE_TARBALL))" ""; \
+	cd "$$tmp_dir" && zip -q -u "$(LUA_RELEASE_ROCK)" "$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))"
 	rm -rf "$(LUA_RELEASE_PACK_DIR)"
 
 lua-rock: $(LUA_ROCK_STAMP)

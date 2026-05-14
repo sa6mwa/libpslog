@@ -101,6 +101,25 @@ if(NOT tagged_probe_contents STREQUAL "1.2.3|1.2.3|1|2|3")
         "expected exact v-tag to resolve to 1.2.3, got '${tagged_probe_contents}'")
 endif()
 
+set(build_metadata_output "${test_root}/build-metadata.txt")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -DPSLOG_ROOT=${PSLOG_ROOT}
+        -DPSLOG_VERSION_SOURCE_DIR=${repo_dir}
+        -DPSLOG_VERSION_OVERRIDE=1.2.3+build.1
+        -DPSLOG_VERSION_PROBE_OUTPUT=${build_metadata_output}
+        -P ${PSLOG_ROOT}/tests/version_resolution_probe.cmake
+    RESULT_VARIABLE build_metadata_probe_result
+    ERROR_VARIABLE build_metadata_probe_error
+)
+if(build_metadata_probe_result EQUAL 0)
+    message(FATAL_ERROR "build metadata version override unexpectedly succeeded")
+endif()
+if(NOT build_metadata_probe_error MATCHES "expected X\\.Y\\.Z with optional[ \t\r\n]+prerelease metadata")
+    message(FATAL_ERROR
+        "build metadata rejection did not explain the supported release version shape: ${build_metadata_probe_error}")
+endif()
+
 file(APPEND "${repo_dir}/README.md" "next commit\n")
 execute_process(
     COMMAND "${PSLOG_GIT_BIN}" add README.md

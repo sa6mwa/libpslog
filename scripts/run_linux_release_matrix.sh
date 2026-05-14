@@ -29,6 +29,16 @@ run_target() {
     cmake --build --preset "$archive_preset"
 }
 
+run_build_only_target() {
+    preset="$1"
+    archive_preset="$2"
+
+    printf '\n== %s ==\n' "$preset"
+    cmake --preset "$preset"
+    cmake --build --preset "$preset"
+    cmake --build --preset "$archive_preset"
+}
+
 require_command cmake
 require_command ctest
 require_command make
@@ -44,6 +54,15 @@ require_command qemu-arm
 require_file "$HOME/.local/cross/aarch64-linux-musl/aarch64-linux-musl/lib/ld-musl-aarch64.so.1"
 require_file "$HOME/.local/cross/arm-linux-musleabihf/arm-linux-musleabihf/lib/ld-musl-armhf.so.1"
 
+darwin_toolchain=""
+darwin_bin="${OSXCROSS_ROOT:-$HOME/.local/cross/osxcross}/bin"
+for cc in "$darwin_bin"/arm64-apple-darwin*-clang; do
+    if [ -x "$cc" ]; then
+        darwin_toolchain="$cc"
+        break
+    fi
+done
+
 cd "$repo_root"
 
 cmake --preset host
@@ -55,9 +74,16 @@ run_target aarch64-linux-gnu-release package-archive-aarch64-linux-gnu
 run_target aarch64-linux-musl-release package-archive-aarch64-linux-musl
 run_target armhf-linux-gnu-release package-archive-armhf-linux-gnu
 run_target armhf-linux-musl-release package-archive-armhf-linux-musl
+if [ -x "$darwin_toolchain" ]; then
+    run_build_only_target arm64-apple-darwin-release package-archive-arm64-apple-darwin
+else
+    printf '\n== arm64-apple-darwin-release ==\n'
+    printf 'Skipping Darwin release target: osxcross arm64 clang not available under %s\n' "$darwin_bin"
+fi
 
 cmake --build --preset package-single-header
 make release-lua-artifacts
+cmake --build --preset package-privacy-gate
 cmake --build --preset package-checksums
 
-printf '\nLinux release matrix completed successfully.\n'
+printf '\nRelease matrix completed successfully.\n'
