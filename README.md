@@ -159,6 +159,20 @@ cc -I../build/host/generated/include -I../include \
 ./example
 ```
 
+Binary tarballs ship minimal consumer metadata:
+
+```sh
+cc $(pkg-config --cflags pslog) -o example example.c $(pkg-config --libs pslog)
+```
+
+```cmake
+find_package(pslog CONFIG REQUIRED)
+target_link_libraries(example PRIVATE pslog::pslog)
+```
+
+The default CMake target links the shared library. Use `pslog::pslog_static`
+when a static link is preferred.
+
 Build the same example in single-header mode:
 
 ```sh

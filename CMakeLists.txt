@@ -327,6 +327,8 @@ if(PSLOG_BUILD_TESTS)
         -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
+        -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
+        -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_archives_test.cmake
     )
     set_tests_properties(package_archives_test PROPERTIES RUN_SERIAL TRUE)
