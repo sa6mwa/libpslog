@@ -1,3 +1,23 @@
+# pslog_perf_artifact: pure-c-summary
+# provenance: backfilled from existing committed artifact; original summary command, date, host, kernel, and compiler were not recorded
+# first_committed: 6d4a683 feat(libpslog): ship cross-tested logging library and benchmark suite
+# measured_commit: not recorded
+# date: not recorded
+# os_kernel: not recorded
+# cpu_model: not recorded
+# host: not recorded
+# run_count: 1 for current_file; historical baseline run count not recorded
+# iterations: 200000 for current_file; historical baseline iterations not recorded
+# command: not recorded
+# summary_command: not recorded
+# compiler: not recorded
+# cmake_preset: source artifacts not recorded unless named explicitly below
+# artifact_role: historical baseline-to-final delta summary
+# baseline_file: historical baseline source not committed or not recorded
+# current_file: pure-c-final-taskset-c0.txt
+# summary_method: per-row ns/op delta, historical baseline -> final pinned run
+# pinning: taskset -c 0 for current_file (inferred from filename)
+
 console_api 182.17 -> 131.42 -27.86%
 console_prepared 105.72 -> 91.91 -13.06%
 console_prod_level_fields_build 353.94 -> 316.14 -10.68%

@@ -1,5 +1,13 @@
 #include "pslog_internal.h"
 
+static int pslog_console_prefix_add(size_t *total, size_t add, size_t limit) {
+  if (total == NULL || *total > limit || add > limit - *total) {
+    return 0;
+  }
+  *total += add;
+  return 1;
+}
+
 #define PSLOG_APPEND_CONSOLE_VALUE_RAW_FAST(buffer, field)                     \
   do {                                                                         \
     switch ((field)->type) {                                                   \
@@ -165,7 +173,6 @@
       break;                                                                   \
     }                                                                          \
     }                                                                          \
-    PSLOG_APPEND_CONSOLE_VALUE_RAW_FAST((buffer), (field));                    \
   } while (0)
 
 #define PSLOG_APPEND_CONSOLE_FIELD_FALLBACK_FAST(shared, buffer, field)        \
@@ -198,6 +205,10 @@ static void
 pslog_append_console_kvfmt_prefix(pslog_shared_state *shared,
                                   pslog_buffer *buffer,
                                   const pslog_kvfmt_field_spec *spec);
+#if defined(PSLOG_TEST_HOOKS)
+static void pslog_console_cache_lock(pslog_shared_state *shared);
+static void pslog_console_cache_unlock(pslog_shared_state *shared);
+#endif
 static const pslog_console_prefix_cache_entry *
 pslog_resolve_console_prefix(pslog_shared_state *shared,
                              const pslog_field *field);
@@ -234,6 +245,7 @@ void pslog_emit_console(pslog_logger_impl *impl, pslog_level level,
   pslog_field level_field;
 
   pslog_buffer_init(&buffer, impl->shared, impl->shared->line_buffer_capacity);
+  pslog_buffer_lock_output(&buffer);
   if (impl->shared->timestamps) {
     PSLOG_APPLY_COLOR_FAST(&buffer, impl->shared->palette->timestamp,
                            impl->shared->palette_timestamp_len,
@@ -272,6 +284,7 @@ void pslog_emit_console(pslog_logger_impl *impl, pslog_level level,
                          impl->shared->color_enabled);
   pslog_buffer_finish_line(&buffer);
   pslog_write_buffer(impl->shared, &buffer);
+  pslog_buffer_unlock_output(&buffer);
   PSLOG_BUFFER_DESTROY_FAST(&buffer);
 }
 
@@ -287,6 +300,7 @@ void pslog_emit_console_kvfmt(pslog_logger_impl *impl, pslog_level level,
   }
 
   pslog_buffer_init(&buffer, impl->shared, impl->shared->line_buffer_capacity);
+  pslog_buffer_lock_output(&buffer);
   if (impl->shared->timestamps) {
     PSLOG_APPLY_COLOR_FAST(&buffer, impl->shared->palette->timestamp,
                            impl->shared->palette_timestamp_len,
@@ -324,6 +338,7 @@ void pslog_emit_console_kvfmt(pslog_logger_impl *impl, pslog_level level,
                          impl->shared->color_enabled);
   pslog_buffer_finish_line(&buffer);
   pslog_write_buffer(impl->shared, &buffer);
+  pslog_buffer_unlock_output(&buffer);
   PSLOG_BUFFER_DESTROY_FAST(&buffer);
 }
 
@@ -477,6 +492,20 @@ pslog_append_console_kvfmt_prefix(pslog_shared_state *shared,
   }
 }
 
+#if defined(PSLOG_TEST_HOOKS)
+static void pslog_console_cache_lock(pslog_shared_state *shared) {
+  if (shared != NULL) {
+    (void)pthread_mutex_lock(&shared->state_mutex);
+  }
+}
+
+static void pslog_console_cache_unlock(pslog_shared_state *shared) {
+  if (shared != NULL) {
+    (void)pthread_mutex_unlock(&shared->state_mutex);
+  }
+}
+#endif
+
 static const pslog_console_prefix_cache_entry *
 pslog_resolve_console_prefix(pslog_shared_state *shared,
                              const pslog_field *field) {
@@ -488,6 +517,7 @@ pslog_resolve_console_prefix(pslog_shared_state *shared,
   size_t selected_index;
   size_t value_color_len;
   size_t prefix_len;
+  size_t prefix_limit;
 
   if (shared == NULL || field == NULL || field->key == NULL ||
       field->key[0] == '\0') {
@@ -503,7 +533,9 @@ pslog_resolve_console_prefix(pslog_shared_state *shared,
     index = (slot + probe) % PSLOG_CONSOLE_PREFIX_CACHE_SIZE;
     if (shared->console_prefix_cache[index].key == field->key &&
         shared->console_prefix_cache[index].type == field->type &&
-        shared->console_prefix_cache[index].key_len == field->key_len) {
+        shared->console_prefix_cache[index].key_len == field->key_len &&
+        memcmp(shared->console_prefix_cache[index].key_copy, field->key,
+               field->key_len) == 0) {
       return &shared->console_prefix_cache[index];
     }
     if (entry == NULL && shared->console_prefix_cache[index].key == NULL) {
@@ -516,13 +548,23 @@ pslog_resolve_console_prefix(pslog_shared_state *shared,
     entry = &shared->console_prefix_cache[selected_index];
   }
 
-  prefix_len = 1u + field->key_len + 1u;
+  prefix_limit = sizeof(entry->prefix) - 1u;
+  prefix_len = 0u;
+  if (!pslog_console_prefix_add(&prefix_len, 1u, prefix_limit) ||
+      !pslog_console_prefix_add(&prefix_len, field->key_len, prefix_limit) ||
+      !pslog_console_prefix_add(&prefix_len, 1u, prefix_limit)) {
+    return NULL;
+  }
   if (shared->color_enabled) {
     value_color =
         pslog_console_field_value_color(shared, field, &value_color_len);
-    prefix_len += (shared->palette_reset_len * 2u) + shared->palette_key_len +
-                  value_color_len;
-    if (prefix_len >= sizeof(entry->prefix)) {
+    if (!pslog_console_prefix_add(&prefix_len, shared->palette_reset_len,
+                                  prefix_limit) ||
+        !pslog_console_prefix_add(&prefix_len, shared->palette_key_len,
+                                  prefix_limit) ||
+        !pslog_console_prefix_add(&prefix_len, shared->palette_reset_len,
+                                  prefix_limit) ||
+        !pslog_console_prefix_add(&prefix_len, value_color_len, prefix_limit)) {
       return NULL;
     }
     entry->prefix_len = 0u;
@@ -550,9 +592,6 @@ pslog_resolve_console_prefix(pslog_shared_state *shared,
       entry->prefix_len += value_color_len;
     }
   } else {
-    if (prefix_len >= sizeof(entry->prefix)) {
-      return NULL;
-    }
     entry->prefix_len = 0u;
     entry->prefix[entry->prefix_len++] = ' ';
     memcpy(entry->prefix + entry->prefix_len, field->key, field->key_len);
@@ -563,8 +602,22 @@ pslog_resolve_console_prefix(pslog_shared_state *shared,
   entry->key = field->key;
   entry->key_len = field->key_len;
   entry->type = field->type;
+  memcpy(entry->key_copy, field->key, field->key_len);
+  entry->key_copy[field->key_len] = '\0';
   return entry;
 }
+
+#if defined(PSLOG_TEST_HOOKS)
+int pslog_test_console_prefix_cacheable(pslog_shared_state *shared,
+                                        const pslog_field *field) {
+  const pslog_console_prefix_cache_entry *prefix;
+
+  pslog_console_cache_lock(shared);
+  prefix = pslog_resolve_console_prefix(shared, field);
+  pslog_console_cache_unlock(shared);
+  return prefix != NULL;
+}
+#endif
 
 static void pslog_append_console_field_cached(pslog_shared_state *shared,
                                               pslog_buffer *buffer,
@@ -578,11 +631,10 @@ static void pslog_append_console_field_cached(pslog_shared_state *shared,
   prefix = pslog_resolve_console_prefix(shared, field);
   if (prefix != NULL) {
     PSLOG_BUFFER_APPEND_N_FAST(buffer, prefix->prefix, prefix->prefix_len);
-  } else {
-    PSLOG_APPEND_CONSOLE_FIELD_FALLBACK_FAST(shared, buffer, field);
+    PSLOG_APPEND_CONSOLE_VALUE_RAW_FAST(buffer, field);
     return;
   }
-  PSLOG_APPEND_CONSOLE_VALUE_RAW_FAST(buffer, field);
+  PSLOG_APPEND_CONSOLE_FIELD_FALLBACK_FAST(shared, buffer, field);
 }
 
 static const char *pslog_console_field_value_color(pslog_shared_state *shared,

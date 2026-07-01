@@ -1,3 +1,22 @@
+# pslog_perf_artifact: pure-c-raw-run
+# provenance: backfilled from existing committed artifact; original run date, host, kernel, and compiler were not recorded
+# first_committed: 6d4a683 feat(libpslog): ship cross-tested logging library and benchmark suite
+# measured_commit: not recorded
+# date: not recorded
+# os_kernel: not recorded
+# cpu_model: not recorded
+# cmake_options: not recorded
+# benchmark: pure C pslog_bench
+# command: ./build/host/pslog_bench 200000 all (inferred from rows)
+# cmake_preset: host (inferred from benchmark workflow)
+# optional_deps: liblogger rows present where shown; quill rows absent
+# host: not recorded
+# compiler: not recorded
+# artifact_role: historical raw run after P1 tee partial-write fix
+# iterations: 200000
+# run_count: 1
+# pinning: not recorded
+
 console_api              iterations=200000 elapsed=0.050248 sec ns/op=251.24 bytes/op=72.94
 console_prepared         iterations=200000 elapsed=0.035627 sec ns/op=178.14 bytes/op=72.94
 consolecolor_api         iterations=200000 elapsed=0.052076 sec ns/op=260.38 bytes/op=170.94

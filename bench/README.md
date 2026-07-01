@@ -11,21 +11,31 @@ For a reproducible local rebaseline from the repository root:
 ./bench/run_rebaseline.sh
 ```
 
-That script rebuilds the release binary, runs the debug tests, runs the full pure C benchmark matrix, then runs the Go-vs-C compare suite in `gobencher`.
+That script rebuilds the release binary, runs the matching host test preset,
+runs the full pure C benchmark matrix, then runs the Go-vs-C compare suite in
+`gobencher`.
 
-For a hard fail-fast performance gate on the primary compare paths:
+For a hard fail-fast performance regression gate:
 
 ```sh
 ./bench/run_perf_gate.sh
 ```
 
-That gate forces a fresh temporary `GOCACHE` for `gobencher`, runs the C-path smoke tests, then asserts that the primary `*C` compare path still beats the corresponding `*Go` path for:
+That gate builds the host release target, runs the host CTest preset, builds the
+repo-local Lua rock, then checks:
 
-- production `json`, `jsoncolor`, `console`, `consolecolor`
-- fixed `json`, `jsoncolor`, `console`, `consolecolor`
+- pure C `pslog_bench` rows against `performance-logs/pure-c-baseline.txt`
+- embedded Lua 5.5 `jsonLua` and table-form rows against
+  `performance-logs/lua-baseline.txt`
 
-It also asserts `jsonCkvfmt < jsonGo` for both production and fixed, so the
-real C `logf`/`kvfmt` JSON path stays ahead of the Go variadic keyval path.
+By default, pure C and Lua rows may be up to `50%` slower than the checked-in
+baselines. Override those limits with `PSLOG_PERF_C_TOLERANCE` and
+`PSLOG_PERF_LUA_TOLERANCE` when running on a controlled machine. The pure C
+run uses `taskset -c 0` when available because the current C baseline was
+recorded that way; override the CPU with `PSLOG_PERF_CPU`, or set it to an
+empty value to disable pinning. The script still prints an observational
+Go-vs-C compare, but Go-relative timing no longer defines the hard pass/fail
+contract.
 
 Both the pure C and Go-vs-C benchmark paths regenerate timestamps from the
 real clock. The production dataset strips source `ts` fields first, so the
@@ -38,7 +48,8 @@ it as build artifacts when needed.
 
 Committed benchmark artifacts belong in
 [performance-logs/](../performance-logs/README.md), not under `build/`. Treat
-`performance-logs/pure-c-baseline.txt` as the current checked-in baseline when
+`performance-logs/pure-c-baseline.txt` and
+`performance-logs/lua-baseline.txt` as the current checked-in baselines when
 recording new comparison runs.
 
 ## Pure C Benchmarks

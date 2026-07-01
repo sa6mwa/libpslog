@@ -39,9 +39,9 @@ The embedded-Lua compare path loads the shipped rock from `../build/luarocks`.
 ```sh
 go test ./...
 go test ./benchmark -run '^$' -bench . -benchmem
-go run ./cmd/elevatorpitch
-go run ./cmd/elevatorpitch -duration=3s -interval=100ms -limit=512
-go run ./cmd/elevatorpitch -include-quill
+make -C .. elevatorpitch
+make -C .. elevatorpitch ELEVATORPITCH_ARGS='-duration=3s -interval=100ms -limit=512'
+make -C .. elevatorpitch ELEVATORPITCH_ARGS='-include-quill'
 ```
 
 From the repository root, `./bench/run_rebaseline.sh` runs the pure C benchmark matrix first and then this Go-vs-C compare suite.
@@ -93,7 +93,9 @@ elevatorpitch behavior.
 
 ## Elevator Pitch
 
-`go run ./cmd/elevatorpitch` renders the live comparison chart. The default bar set compares:
+`make elevatorpitch` from the repository root renders the live comparison chart
+after preparing the local C library, generated benchmark fixtures, and Lua rock.
+The default bar set compares:
 
 - `jsonGo` / `jsonC`
 - `jsonLua`

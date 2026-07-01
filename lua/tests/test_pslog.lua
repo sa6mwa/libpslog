@@ -31,7 +31,7 @@ do
     disable_timestamp = true,
   })
 
-  log:info("ready", "service", "api", "attempt", 3, "ok", true)
+  log:info("ready", "service", "api", "attempt", 3, "ok", true, "blob", "a\0b")
   log:close()
 
   local payload = read_all(path)
@@ -39,6 +39,7 @@ do
   assert_contains(payload, '"service":"api"', "missing service field")
   assert_contains(payload, '"attempt":3', "missing integer field")
   assert_contains(payload, '"ok":true', "missing boolean field")
+  assert_contains(payload, '"blob":"a\\u0000b"', "missing embedded NUL string field")
   os.remove(path)
 end
 
@@ -135,12 +136,38 @@ do
 end
 
 do
+  local path = "/tmp/libpslog-lua-table-temporaries.log"
+  local log = pslog.new_json(path, {
+    no_color = true,
+    disable_timestamp = true,
+  }):with({
+    [1] = { nested = true },
+    [2] = "two",
+    nested = { value = "stringified" },
+  })
+  local payload
+
+  log:info("temporaries")
+  log:close()
+  payload = read_all(path)
+
+  assert_contains(payload, '"1":"table:', "missing converted numeric key with stringified table value")
+  assert_contains(payload, '"2":"two"', "missing converted numeric key")
+  assert_contains(payload, '"nested":"table:', "missing stringified table value")
+  os.remove(path)
+end
+
+do
   local parsed = pslog.parse_level("warn")
   local palettes = pslog.available_palettes()
 
   assert_eq(parsed, "warn", "parse_level")
   assert_true(type(pslog.version()) == "string" and #pslog.version() > 0, "version should be non-empty")
   assert_true(type(palettes) == "table" and #palettes > 0, "expected built-in palettes")
+  assert_eq(pslog._wrap_bytes, nil, "private wrapper helper leaked through facade")
+  assert_eq(pslog._wrap_trusted, nil, "private trusted wrapper helper leaked through facade")
+  assert_eq(pslog.new_logger, nil, "private constructor helper leaked through facade")
+  assert_eq(pslog.new_logger_from_env, nil, "private env constructor helper leaked through facade")
 end
 
 do
@@ -183,6 +210,7 @@ do
     "duration_e", pslog.duration_s(2.5),
     "errno", pslog.errno(2),
     "trusted", pslog.trusted("svc.checkout"),
+    "trusted_nul", pslog.trusted("a\0b"),
     "big", pslog.u64(42),
     "huge", pslog.u64("18446744073709551615")
   )
@@ -198,6 +226,7 @@ do
   assert_contains(payload, '"duration_d":"42ns"', "missing duration_ns wrapper")
   assert_contains(payload, '"duration_e":"2.500s"', "missing duration_s wrapper")
   assert_contains(payload, '"trusted":"svc.checkout"', "missing trusted wrapper")
+  assert_contains(payload, '"trusted_nul":"a\\u0000b"', "missing trusted embedded NUL wrapper")
   assert_contains(payload, '"big":42', "missing u64 wrapper")
   assert_contains(payload, '"huge":18446744073709551615', "missing u64 decimal-string wrapper")
   assert_contains(payload, '"errno":"', "missing errno wrapper")
@@ -245,6 +274,9 @@ do
   ok, err = pcall(function() pslog.u64(-1) end)
   assert_true(not ok and err:find("expects a non%-negative integer") ~= nil, "expected u64 range failure")
 
+  ok, err = pcall(function() pslog.u64("18446744073709551616") end)
+  assert_true(not ok and err:find("exceeds uint64 range", 1, true) ~= nil, "expected u64 decimal overflow failure")
+
   ok, err = pcall(function() pslog.new({ mode = "bogus" }) end)
   assert_true(not ok and err:find("invalid mode", 1, true) ~= nil, "expected invalid mode failure")
 
@@ -266,6 +298,42 @@ do
     log:info("odd", "k1", "v1", "orphan")
   end)
   assert_true(not ok and err:find("expected key/value pairs", 1, true) ~= nil, "expected key/value arity failure")
+end
+
+do
+  local chunks = {}
+  local seen = {}
+  local log = pslog.new_json({
+    output = function(chunk)
+      chunks[#chunks + 1] = chunk
+    end,
+    no_color = true,
+    disable_timestamp = true,
+  })
+  local i
+
+  for i = 1, 512 do
+    local key = string.format("dynamic_%03d_\\_\"", i)
+    local value = string.format("value-%03d-with-escape-\\-and-quote-\"-suffix-%d", i, i * 97)
+    local msg = string.format("metadata-%03d", i)
+
+    seen[msg] = { key = key, value = value }
+    log:info(msg, key, value)
+    key = nil
+    value = nil
+    collectgarbage("collect")
+  end
+  log:close()
+
+  local payload = table.concat(chunks)
+  for msg, field in pairs(seen) do
+    local escaped_key = field.key:gsub("\\", "\\\\"):gsub('"', '\\"')
+    local escaped_value = field.value:gsub("\\", "\\\\"):gsub('"', '\\"')
+
+    assert_contains(payload, string.format('"msg":"%s"', msg), "missing metadata message")
+    assert_contains(payload, string.format('"%s":"%s"', escaped_key, escaped_value),
+      "missing dynamic key/value field")
+  end
 end
 
 do

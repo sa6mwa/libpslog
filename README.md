@@ -76,10 +76,13 @@ Derived logger path:
 ```c
 pslog_field base[1];
 pslog_logger *child;
+pslog_logger *next;
 
 base[0] = pslog_str("subsystem", "worker");
 child = log->with(log, base, 1u);
-child = child->with_level_field(child);
+next = child->with_level_field(child);
+child->destroy(child);
+child = next;
 child->warn(child, "retrying", NULL, 0u);
 child->destroy(child);
 ```
@@ -155,7 +158,7 @@ cmake --preset host
 cmake --build --preset host
 cd examples
 cc -I../build/host/generated/include -I../include \
-  -o example example.c ../build/host/libpslog.a
+  -o example example.c ../build/host/libpslog.a -pthread
 ./example
 ```
 
@@ -181,7 +184,7 @@ cmake --build --preset package-single-header
 cd examples
 cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
   -I../build/host/generated/include \
-  -o example example.c
+  -o example example.c -pthread
 ./example
 ```
 

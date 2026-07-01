@@ -10,7 +10,7 @@ cmake --preset host \
   -DPSLOG_BENCHMARK_WITH_LIBLOGGER=OFF \
   -DPSLOG_BENCHMARK_WITH_QUILL=OFF
 cmake --build --preset host
-ctest --preset debug
+ctest --preset host
 
 printf '\n== Pure C benchmark rebaseline ==\n'
 ./build/host/pslog_bench 500000 all

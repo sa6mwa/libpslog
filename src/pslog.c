@@ -41,6 +41,7 @@ static int pslog_tee_isatty(void *userdata);
 static int pslog_observed_write(void *userdata, const char *data, size_t len,
                                 size_t *written);
 static int pslog_observed_close(void *userdata);
+static int pslog_observed_isatty(void *userdata);
 
 static void pslog_logger_destroy(pslog_logger *log);
 static int pslog_logger_close(pslog_logger *log);
@@ -100,7 +101,8 @@ static void pslog_trim_copy(char *dst, size_t dst_size, const char *text);
 static int pslog_string_iequal(const char *lhs, const char *rhs);
 static int pslog_string_has_prefix_ci(const char *text, const char *prefix);
 static int pslog_is_utf8_continuation(unsigned char ch);
-static size_t pslog_utf8_sequence_len(const unsigned char *cursor);
+static size_t pslog_utf8_sequence_len_n(const unsigned char *cursor,
+                                        size_t remaining);
 static int pslog_string_is_ascii_trusted_measure(const char *text,
                                                  size_t *len_out);
 static int pslog_string_is_trusted_measure(const char *text, size_t *len_out);
@@ -122,7 +124,10 @@ pslog_estimate_field_prefix_capacity(const pslog_field *fields, size_t count,
 static int pslog_build_field_prefix(pslog_logger_impl *impl);
 static pslog_non_finite_float_policy
 pslog_normalize_non_finite_float_policy(pslog_non_finite_float_policy policy);
-static size_t pslog_normalize_line_buffer_capacity(size_t capacity);
+static int pslog_size_add(size_t lhs, size_t rhs, size_t *out);
+static int pslog_size_mul(size_t lhs, size_t rhs, size_t *out);
+static int pslog_normalize_line_buffer_capacity(size_t capacity,
+                                                size_t *normalized_out);
 static int pslog_double_is_nan(double value);
 static int pslog_double_is_inf(double value);
 static size_t pslog_cstr_len_or_zero(const char *text);
@@ -183,25 +188,52 @@ static size_t pslog_write_output_locked(pslog_shared_state *shared,
 
 #if defined(PSLOG_TEST_HOOKS)
 static pslog_test_allocator_stats pslog_test_alloc_stats;
+static unsigned long pslog_test_alloc_fail_after;
+
+static int pslog_test_allocator_should_fail(void) {
+  unsigned long calls;
+
+  if (pslog_test_alloc_fail_after == 0u) {
+    return 0;
+  }
+  calls = pslog_test_alloc_stats.malloc_calls +
+          pslog_test_alloc_stats.calloc_calls +
+          pslog_test_alloc_stats.realloc_calls;
+  return calls >= pslog_test_alloc_fail_after;
+}
 #endif
 
 void *pslog_malloc_internal(size_t size) {
 #if defined(PSLOG_TEST_HOOKS)
   pslog_test_alloc_stats.malloc_calls += 1u;
+  if (pslog_test_allocator_should_fail()) {
+    return NULL;
+  }
 #endif
   return malloc(size);
 }
 
 void *pslog_calloc_internal(size_t count, size_t size) {
+  size_t total_size;
+
 #if defined(PSLOG_TEST_HOOKS)
   pslog_test_alloc_stats.calloc_calls += 1u;
+  if (pslog_test_allocator_should_fail()) {
+    return NULL;
+  }
 #endif
+  if (!pslog_size_mul(count, size, &total_size)) {
+    return NULL;
+  }
   return calloc(count, size);
 }
 
 void *pslog_realloc_internal(void *ptr, size_t size) {
 #if defined(PSLOG_TEST_HOOKS)
   pslog_test_alloc_stats.realloc_calls += 1u;
+  if (pslog_test_allocator_should_fail()) {
+    return NULL;
+  }
 #endif
   return realloc(ptr, size);
 }
@@ -218,12 +250,17 @@ void pslog_free_internal(void *ptr) {
 #if defined(PSLOG_TEST_HOOKS)
 void pslog_test_allocator_reset(void) {
   memset(&pslog_test_alloc_stats, 0, sizeof(pslog_test_alloc_stats));
+  pslog_test_alloc_fail_after = 0u;
 }
 
 void pslog_test_allocator_get(pslog_test_allocator_stats *stats) {
   if (stats != NULL) {
     *stats = pslog_test_alloc_stats;
   }
+}
+
+void pslog_test_allocator_fail_after(unsigned long calls) {
+  pslog_test_alloc_fail_after = calls;
 }
 #endif
 
@@ -287,7 +324,8 @@ void pslog_observed_output_init(pslog_observed_output *observed,
   observed->failure_userdata = failure_userdata;
   observed->output.write = pslog_observed_write;
   observed->output.close = pslog_observed_close;
-  observed->output.isatty = observed->target.isatty;
+  observed->output.isatty =
+      observed->target.isatty != NULL ? pslog_observed_isatty : NULL;
   observed->output.userdata = observed;
   observed->output.owned = observed->target.owned;
 }
@@ -401,10 +439,11 @@ static int pslog_is_utf8_continuation(unsigned char ch) {
   return ch >= 0x80u && ch <= 0xbfu;
 }
 
-static size_t pslog_utf8_sequence_len(const unsigned char *cursor) {
+static size_t pslog_utf8_sequence_len_n(const unsigned char *cursor,
+                                        size_t remaining) {
   unsigned char ch;
 
-  if (cursor == NULL || *cursor == '\0') {
+  if (cursor == NULL || remaining == 0u) {
     return 0u;
   }
   ch = *cursor;
@@ -412,36 +451,34 @@ static size_t pslog_utf8_sequence_len(const unsigned char *cursor) {
     return 1u;
   }
   if (ch >= 0xc2u && ch <= 0xdfu) {
-    if (cursor[1] == '\0' || !pslog_is_utf8_continuation(cursor[1])) {
+    if (remaining < 2u || !pslog_is_utf8_continuation(cursor[1])) {
       return 0u;
     }
     return 2u;
   }
   if (ch == 0xe0u) {
-    if (cursor[1] == '\0' || cursor[2] == '\0' || cursor[1] < 0xa0u ||
-        cursor[1] > 0xbfu || !pslog_is_utf8_continuation(cursor[2])) {
+    if (remaining < 3u || cursor[1] < 0xa0u || cursor[1] > 0xbfu ||
+        !pslog_is_utf8_continuation(cursor[2])) {
       return 0u;
     }
     return 3u;
   }
   if ((ch >= 0xe1u && ch <= 0xecu) || (ch >= 0xeeu && ch <= 0xefu)) {
-    if (cursor[1] == '\0' || cursor[2] == '\0' ||
-        !pslog_is_utf8_continuation(cursor[1]) ||
+    if (remaining < 3u || !pslog_is_utf8_continuation(cursor[1]) ||
         !pslog_is_utf8_continuation(cursor[2])) {
       return 0u;
     }
     return 3u;
   }
   if (ch == 0xedu) {
-    if (cursor[1] == '\0' || cursor[2] == '\0' || cursor[1] < 0x80u ||
-        cursor[1] > 0x9fu || !pslog_is_utf8_continuation(cursor[2])) {
+    if (remaining < 3u || cursor[1] < 0x80u || cursor[1] > 0x9fu ||
+        !pslog_is_utf8_continuation(cursor[2])) {
       return 0u;
     }
     return 3u;
   }
   if (ch == 0xf0u) {
-    if (cursor[1] == '\0' || cursor[2] == '\0' || cursor[3] == '\0' ||
-        cursor[1] < 0x90u || cursor[1] > 0xbfu ||
+    if (remaining < 4u || cursor[1] < 0x90u || cursor[1] > 0xbfu ||
         !pslog_is_utf8_continuation(cursor[2]) ||
         !pslog_is_utf8_continuation(cursor[3])) {
       return 0u;
@@ -449,8 +486,7 @@ static size_t pslog_utf8_sequence_len(const unsigned char *cursor) {
     return 4u;
   }
   if (ch >= 0xf1u && ch <= 0xf3u) {
-    if (cursor[1] == '\0' || cursor[2] == '\0' || cursor[3] == '\0' ||
-        !pslog_is_utf8_continuation(cursor[1]) ||
+    if (remaining < 4u || !pslog_is_utf8_continuation(cursor[1]) ||
         !pslog_is_utf8_continuation(cursor[2]) ||
         !pslog_is_utf8_continuation(cursor[3])) {
       return 0u;
@@ -458,8 +494,7 @@ static size_t pslog_utf8_sequence_len(const unsigned char *cursor) {
     return 4u;
   }
   if (ch == 0xf4u) {
-    if (cursor[1] == '\0' || cursor[2] == '\0' || cursor[3] == '\0' ||
-        cursor[1] < 0x80u || cursor[1] > 0x8fu ||
+    if (remaining < 4u || cursor[1] < 0x80u || cursor[1] > 0x8fu ||
         !pslog_is_utf8_continuation(cursor[2]) ||
         !pslog_is_utf8_continuation(cursor[3])) {
       return 0u;
@@ -479,8 +514,38 @@ pslog_normalize_non_finite_float_policy(pslog_non_finite_float_policy policy) {
   }
 }
 
-static size_t pslog_normalize_line_buffer_capacity(size_t capacity) {
-  return capacity == 0u ? PSLOG_DEFAULT_LINE_BUFFER_CAPACITY : capacity;
+static int pslog_size_add(size_t lhs, size_t rhs, size_t *out) {
+  if (out == NULL || lhs > (size_t)-1 - rhs) {
+    return 0;
+  }
+  *out = lhs + rhs;
+  return 1;
+}
+
+static int pslog_size_mul(size_t lhs, size_t rhs, size_t *out) {
+  if (out == NULL) {
+    return 0;
+  }
+  if (lhs != 0u && rhs > (size_t)-1 / lhs) {
+    return 0;
+  }
+  *out = lhs * rhs;
+  return 1;
+}
+
+static int pslog_normalize_line_buffer_capacity(size_t capacity,
+                                                size_t *normalized_out) {
+  size_t normalized;
+
+  if (normalized_out == NULL) {
+    return 0;
+  }
+  normalized = capacity == 0u ? PSLOG_DEFAULT_LINE_BUFFER_CAPACITY : capacity;
+  if (normalized > (size_t)-1 - 1u) {
+    return 0;
+  }
+  *normalized_out = normalized;
+  return 1;
 }
 
 static int pslog_double_is_nan(double value) { return value != value; }
@@ -530,8 +595,10 @@ static int pslog_string_is_ascii_trusted_measure(const char *text,
   const unsigned char *cursor;
   unsigned char ch;
   size_t len;
+  int trusted;
 
   len = 0u;
+  trusted = 1;
   if (len_out != NULL) {
     *len_out = 0u;
   }
@@ -543,7 +610,7 @@ static int pslog_string_is_ascii_trusted_measure(const char *text,
   while (*cursor != '\0') {
     ch = *cursor;
     if (ch >= 0x80u || ch < 0x20u || ch == 0x7fu || ch == '"' || ch == '\\') {
-      return 0;
+      trusted = 0;
     }
     ++cursor;
     ++len;
@@ -551,15 +618,17 @@ static int pslog_string_is_ascii_trusted_measure(const char *text,
   if (len_out != NULL) {
     *len_out = len;
   }
-  return 1;
+  return trusted;
 }
 
 static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
   const unsigned char *cursor;
   unsigned char ch;
   size_t len;
+  int trusted;
 
   len = 0u;
+  trusted = 1;
   if (len_out != NULL) {
     *len_out = 0u;
   }
@@ -574,7 +643,7 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
     ch = *cursor;
     if (ch < 0x80u) {
       if (ch < 0x20u || ch == 0x7fu || ch == '"' || ch == '\\') {
-        return 0;
+        trusted = 0;
       }
       ++cursor;
       ++len;
@@ -582,6 +651,10 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
     }
     if (ch >= 0xc2u && ch <= 0xdfu) {
       if (cursor[1] == '\0' || !pslog_is_utf8_continuation(cursor[1])) {
+        len += strlen((const char *)cursor);
+        if (len_out != NULL) {
+          *len_out = len;
+        }
         return 0;
       }
       cursor += 2;
@@ -591,6 +664,10 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
     if (ch == 0xe0u) {
       if (cursor[1] == '\0' || cursor[2] == '\0' || cursor[1] < 0xa0u ||
           cursor[1] > 0xbfu || !pslog_is_utf8_continuation(cursor[2])) {
+        len += strlen((const char *)cursor);
+        if (len_out != NULL) {
+          *len_out = len;
+        }
         return 0;
       }
       cursor += 3;
@@ -601,6 +678,10 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
       if (cursor[1] == '\0' || cursor[2] == '\0' ||
           !pslog_is_utf8_continuation(cursor[1]) ||
           !pslog_is_utf8_continuation(cursor[2])) {
+        len += strlen((const char *)cursor);
+        if (len_out != NULL) {
+          *len_out = len;
+        }
         return 0;
       }
       cursor += 3;
@@ -610,6 +691,10 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
     if (ch == 0xedu) {
       if (cursor[1] == '\0' || cursor[2] == '\0' || cursor[1] < 0x80u ||
           cursor[1] > 0x9fu || !pslog_is_utf8_continuation(cursor[2])) {
+        len += strlen((const char *)cursor);
+        if (len_out != NULL) {
+          *len_out = len;
+        }
         return 0;
       }
       cursor += 3;
@@ -621,6 +706,10 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
           cursor[1] < 0x90u || cursor[1] > 0xbfu ||
           !pslog_is_utf8_continuation(cursor[2]) ||
           !pslog_is_utf8_continuation(cursor[3])) {
+        len += strlen((const char *)cursor);
+        if (len_out != NULL) {
+          *len_out = len;
+        }
         return 0;
       }
       cursor += 4;
@@ -632,6 +721,10 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
           !pslog_is_utf8_continuation(cursor[1]) ||
           !pslog_is_utf8_continuation(cursor[2]) ||
           !pslog_is_utf8_continuation(cursor[3])) {
+        len += strlen((const char *)cursor);
+        if (len_out != NULL) {
+          *len_out = len;
+        }
         return 0;
       }
       cursor += 4;
@@ -643,6 +736,10 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
           cursor[1] < 0x80u || cursor[1] > 0x8fu ||
           !pslog_is_utf8_continuation(cursor[2]) ||
           !pslog_is_utf8_continuation(cursor[3])) {
+        len += strlen((const char *)cursor);
+        if (len_out != NULL) {
+          *len_out = len;
+        }
         return 0;
       }
       cursor += 4;
@@ -650,13 +747,17 @@ static int pslog_string_is_trusted_measure(const char *text, size_t *len_out) {
       continue;
     }
     {
+      len += strlen((const char *)cursor);
+      if (len_out != NULL) {
+        *len_out = len;
+      }
       return 0;
     }
   }
   if (len_out != NULL) {
     *len_out = len;
   }
-  return 1;
+  return trusted;
 }
 
 int pslog_string_is_trusted(const char *text) {
@@ -837,8 +938,9 @@ static int pslog_parse_kvfmt_layout(pslog_kvfmt_cache_entry *entry,
     }
     ++cursor;
     ++field_count;
-    while (*cursor != '\0' && *cursor != ' ') {
-      ++cursor;
+    if (*cursor != '\0' && *cursor != ' ') {
+      pslog_reset_kvfmt_cache_entry(entry);
+      return -1;
     }
   }
   entry->field_count = field_count;
@@ -1287,6 +1389,7 @@ pslog_logger *pslog_new(const pslog_config *config) {
   pslog_logger *logger;
   pslog_logger_impl *impl;
   char *time_format_storage;
+  size_t normalized_line_buffer_capacity;
 
   pslog_default_config(&effective);
   if (config != NULL) {
@@ -1297,6 +1400,10 @@ pslog_logger *pslog_new(const pslog_config *config) {
     if (effective.output.write == NULL) {
       effective.output = pslog_output_from_fp(stdout, 0);
     }
+  }
+  if (!pslog_normalize_line_buffer_capacity(effective.line_buffer_capacity,
+                                            &normalized_line_buffer_capacity)) {
+    return NULL;
   }
 
   shared = (pslog_shared_state *)pslog_calloc_internal(1u, sizeof(*shared));
@@ -1316,8 +1423,7 @@ pslog_logger *pslog_new(const pslog_config *config) {
   shared->mode = effective.mode;
   shared->non_finite_float_policy = pslog_normalize_non_finite_float_policy(
       effective.non_finite_float_policy);
-  shared->line_buffer_capacity =
-      pslog_normalize_line_buffer_capacity(effective.line_buffer_capacity);
+  shared->line_buffer_capacity = normalized_line_buffer_capacity;
   shared->timestamp_cacheable =
       !pslog_time_format_is_rfc3339nano(effective.time_format);
   shared->min_level = effective.min_level;
@@ -1754,25 +1860,31 @@ pslog_logger *pslog_with_level_field(pslog_logger *log) {
 
 void pslog_buffer_init(pslog_buffer *buffer, pslog_shared_state *shared,
                        size_t capacity) {
+  size_t alloc_size;
   size_t normalized_capacity;
 
   if (buffer == NULL) {
     return;
   }
   buffer->shared = shared;
-  normalized_capacity = pslog_normalize_line_buffer_capacity(capacity);
+  if (!pslog_normalize_line_buffer_capacity(capacity, &normalized_capacity)) {
+    normalized_capacity = PSLOG_DEFAULT_LINE_BUFFER_CAPACITY;
+  }
   buffer->capacity = normalized_capacity;
   buffer->chunk_capacity = normalized_capacity;
   buffer->output_locked = 0;
   buffer->heap_owned = 0;
   buffer->data = buffer->inline_data;
-  if (buffer->capacity > sizeof(buffer->inline_data)) {
-    buffer->data = (char *)pslog_malloc_internal(buffer->capacity + 1u);
-    if (buffer->data != NULL) {
+  if (buffer->capacity >= sizeof(buffer->inline_data)) {
+    if (pslog_size_add(buffer->capacity, 1u, &alloc_size)) {
+      buffer->data = (char *)pslog_malloc_internal(alloc_size);
+    }
+    if (buffer->data != NULL && buffer->data != buffer->inline_data) {
       buffer->heap_owned = 1;
     } else {
       buffer->data = buffer->inline_data;
-      buffer->capacity = sizeof(buffer->inline_data);
+      buffer->capacity = sizeof(buffer->inline_data) - 1u;
+      buffer->chunk_capacity = PSLOG_DEFAULT_LINE_BUFFER_CAPACITY;
     }
   }
   buffer->len = 0u;
@@ -1780,10 +1892,14 @@ void pslog_buffer_init(pslog_buffer *buffer, pslog_shared_state *shared,
 }
 
 int pslog_buffer_reserve(pslog_buffer *buffer, size_t min_capacity) {
+  size_t alloc_size;
   char *new_data;
   size_t new_capacity;
 
   if (buffer == NULL) {
+    return -1;
+  }
+  if (min_capacity > (size_t)-1 - 1u || buffer->capacity > (size_t)-1 - 1u) {
     return -1;
   }
   if (min_capacity <= buffer->capacity) {
@@ -1798,13 +1914,19 @@ int pslog_buffer_reserve(pslog_buffer *buffer, size_t min_capacity) {
     new_capacity *= 2u;
   }
   if (buffer->heap_owned) {
-    new_data = (char *)pslog_realloc_internal(buffer->data, new_capacity + 1u);
+    if (!pslog_size_add(new_capacity, 1u, &alloc_size)) {
+      return -1;
+    }
+    new_data = (char *)pslog_realloc_internal(buffer->data, alloc_size);
     if (new_data == NULL) {
       return -1;
     }
     buffer->data = new_data;
   } else {
-    new_data = (char *)pslog_malloc_internal(new_capacity + 1u);
+    if (!pslog_size_add(new_capacity, 1u, &alloc_size)) {
+      return -1;
+    }
+    new_data = (char *)pslog_malloc_internal(alloc_size);
     if (new_data == NULL) {
       return -1;
     }
@@ -1892,6 +2014,12 @@ void pslog_buffer_append_cstr(pslog_buffer *buffer, const char *text) {
 }
 
 void pslog_buffer_append_json_string(pslog_buffer *buffer, const char *text) {
+  pslog_buffer_append_json_string_n(buffer, text,
+                                    text != NULL ? strlen(text) : 0u);
+}
+
+void pslog_buffer_append_json_string_n(pslog_buffer *buffer, const char *text,
+                                       size_t len) {
   static const char hex[] = "0123456789abcdef";
   static const unsigned char escape_kind[256] = {
       6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 4, 6, 6, 3, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
@@ -1909,17 +2037,22 @@ void pslog_buffer_append_json_string(pslog_buffer *buffer, const char *text) {
   unsigned char kind;
   const char *cursor;
   const char *chunk_start;
+  const char *end;
   size_t utf8_len;
+  size_t remaining;
 
   PSLOG_BUFFER_APPEND_CHAR_FAST(buffer, '"');
-  if (text != NULL) {
+  if (text != NULL && len > 0u) {
     cursor = text;
     chunk_start = text;
-    while (*cursor != '\0') {
+    end = text + len;
+    while (cursor < end) {
       ch = (unsigned char)*cursor;
       kind = 0u;
       if (ch >= 0x80u) {
-        utf8_len = pslog_utf8_sequence_len((const unsigned char *)cursor);
+        remaining = (size_t)(end - cursor);
+        utf8_len =
+            pslog_utf8_sequence_len_n((const unsigned char *)cursor, remaining);
         if (utf8_len == 0u) {
           if (cursor > chunk_start) {
             PSLOG_BUFFER_APPEND_N_FAST(buffer, chunk_start,
@@ -2169,6 +2302,42 @@ void pslog_buffer_append_unsigned(pslog_buffer *buffer, pslog_uint64 value) {
                              (size_t)((tmp + sizeof(tmp)) - cursor));
 }
 
+void pslog_normalize_decimal_separator(char *text, size_t len) {
+  size_t i;
+
+  if (text == NULL || len == 0u) {
+    return;
+  }
+  for (i = 0u; i < len; ++i) {
+    if (text[i] == ',') {
+      text[i] = '.';
+    }
+  }
+}
+
+int pslog_format_double_ascii(char *dst, size_t dst_size, double value) {
+  char *separator;
+  int len;
+
+  if (dst == NULL || dst_size == 0u) {
+    return -1;
+  }
+  len = sprintf(dst, "%.17g", value);
+  if (len <= 0) {
+    dst[0] = '\0';
+    return len;
+  }
+  if ((size_t)len >= dst_size) {
+    dst[dst_size - 1u] = '\0';
+    len = (int)(dst_size - 1u);
+  }
+  separator = (char *)memchr(dst, ',', (size_t)len);
+  if (separator != NULL) {
+    *separator = '.';
+  }
+  return len;
+}
+
 void pslog_buffer_append_double(pslog_buffer *buffer, double value) {
   union {
     double value;
@@ -2195,26 +2364,42 @@ void pslog_buffer_append_double(pslog_buffer *buffer, double value) {
       hash ^= (unsigned long)bits.bytes[i];
       hash *= 16777619ul;
     }
+    pslog_state_lock(buffer->shared);
     entry = &buffer->shared->double_cache[hash % PSLOG_DOUBLE_CACHE_SIZE];
     if (entry->valid &&
         memcmp(entry->bits, bits.bytes, sizeof(bits.bytes)) == 0) {
-      PSLOG_BUFFER_APPEND_N_FAST(buffer, entry->rendered, entry->rendered_len);
+      len = (int)entry->rendered_len;
+      if (len > 0 && (size_t)len < sizeof(tmp)) {
+        memcpy(tmp, entry->rendered, (size_t)len);
+        tmp[(size_t)len] = '\0';
+      } else {
+        len = 0;
+      }
+      pslog_state_unlock(buffer->shared);
+      if (len > 0) {
+        PSLOG_BUFFER_APPEND_N_FAST(buffer, tmp, (size_t)len);
+      }
       return;
     }
-    len = sprintf(tmp, "%.17g", value);
+    pslog_state_unlock(buffer->shared);
+    len = pslog_format_double_ascii(tmp, sizeof(tmp), value);
     if (len > 0) {
+      entry = &buffer->shared->double_cache[hash % PSLOG_DOUBLE_CACHE_SIZE];
       if ((size_t)len < sizeof(entry->rendered)) {
-        entry->valid = 1;
+        pslog_state_lock(buffer->shared);
+        entry->valid = 0;
         memcpy(entry->bits, bits.bytes, sizeof(bits.bytes));
         memcpy(entry->rendered, tmp, (size_t)len);
         entry->rendered[(size_t)len] = '\0';
         entry->rendered_len = (size_t)len;
+        entry->valid = 1;
+        pslog_state_unlock(buffer->shared);
       }
       PSLOG_BUFFER_APPEND_N_FAST(buffer, tmp, (size_t)len);
     }
     return;
   }
-  len = sprintf(tmp, "%.17g", value);
+  len = pslog_format_double_ascii(tmp, sizeof(tmp), value);
   if (len > 0) {
     PSLOG_BUFFER_APPEND_N_FAST(buffer, tmp, (size_t)len);
   }
@@ -2468,6 +2653,12 @@ int pslog_should_log(pslog_logger_impl *impl, pslog_level level) {
   if (impl->shared->closed) {
     return 0;
   }
+  if (level == PSLOG_LEVEL_DISABLED) {
+    return 0;
+  }
+  if (level == PSLOG_LEVEL_FATAL || level == PSLOG_LEVEL_PANIC) {
+    return 1;
+  }
   if (impl->min_level == PSLOG_LEVEL_DISABLED) {
     return 0;
   }
@@ -2569,6 +2760,22 @@ void pslog_buffer_flush(pslog_buffer *buffer) {
                                   buffer->chunk_capacity);
   buffer->len = 0u;
   buffer->data[0] = '\0';
+}
+
+void pslog_buffer_lock_output(pslog_buffer *buffer) {
+  if (buffer == NULL || buffer->shared == NULL || buffer->output_locked) {
+    return;
+  }
+  pslog_output_lock(buffer->shared);
+  buffer->output_locked = 1;
+}
+
+void pslog_buffer_unlock_output(pslog_buffer *buffer) {
+  if (buffer == NULL || buffer->shared == NULL || !buffer->output_locked) {
+    return;
+  }
+  pslog_output_unlock(buffer->shared);
+  buffer->output_locked = 0;
 }
 
 void pslog_append_timestamp(pslog_shared_state *shared, pslog_buffer *buffer) {
@@ -2824,29 +3031,45 @@ static int pslog_copy_field(pslog_field *dst, const pslog_field *src) {
   void *bytes_copy;
 
   pslog_append_owned_field_copy(dst, src);
-  key_copy = pslog_strdup_local(src->key != NULL ? src->key : "");
+  if (src->key_len == (size_t)-1 ||
+      (src->type == PSLOG_FIELD_STRING && src->value_len == (size_t)-1)) {
+    return -1;
+  }
+  key_copy = (char *)pslog_malloc_internal(src->key_len + 1u);
   if (key_copy == NULL) {
     return -1;
   }
+  if (src->key != NULL && src->key_len > 0u) {
+    memcpy(key_copy, src->key, src->key_len);
+  }
+  key_copy[src->key_len] = '\0';
   dst->key = key_copy;
 
   if (src->type == PSLOG_FIELD_STRING) {
-    string_copy = pslog_strdup_local(src->as.string_value);
+    string_copy = (char *)pslog_malloc_internal(src->value_len + 1u);
     if (string_copy == NULL) {
       pslog_free_internal((void *)dst->key);
       dst->key = NULL;
       return -1;
     }
-    dst->as.string_value = string_copy;
-  } else if (src->type == PSLOG_FIELD_BYTES && src->as.bytes_value.len > 0u) {
-    bytes_copy =
-        pslog_memdup_local(src->as.bytes_value.data, src->as.bytes_value.len);
-    if (bytes_copy == NULL) {
-      pslog_free_internal((void *)dst->key);
-      dst->key = NULL;
-      return -1;
+    if (src->as.string_value != NULL && src->value_len > 0u) {
+      memcpy(string_copy, src->as.string_value, src->value_len);
     }
-    dst->as.bytes_value.data = (const unsigned char *)bytes_copy;
+    string_copy[src->value_len] = '\0';
+    dst->as.string_value = string_copy;
+  } else if (src->type == PSLOG_FIELD_BYTES) {
+    if (src->as.bytes_value.len > 0u) {
+      bytes_copy =
+          pslog_memdup_local(src->as.bytes_value.data, src->as.bytes_value.len);
+      if (bytes_copy == NULL) {
+        pslog_free_internal((void *)dst->key);
+        dst->key = NULL;
+        return -1;
+      }
+      dst->as.bytes_value.data = (const unsigned char *)bytes_copy;
+    } else {
+      dst->as.bytes_value.data = NULL;
+    }
   }
   return 0;
 }
@@ -2875,9 +3098,11 @@ static int pslog_copy_fields(pslog_field **out_fields, size_t *out_count,
   size_t i;
   pslog_field *copy;
 
-  total = base_count + new_count;
   *out_fields = NULL;
   *out_count = 0u;
+  if (!pslog_size_add(base_count, new_count, &total)) {
+    return -1;
+  }
   if (total == 0u) {
     return 0;
   }
@@ -3099,7 +3324,7 @@ void pslog_log_impl(pslog_logger *log, pslog_level level, const char *msg,
 int pslog_parse_kvfmt(pslog_shared_state *shared, pslog_field *fields,
                       size_t *out_count, pslog_mode mode, const char *kvfmt,
                       int saved_errno, va_list ap) {
-  pslog_kvfmt_cache_entry local_entry;
+  pslog_kvfmt_cache_entry local_entry = {0};
   const pslog_kvfmt_cache_entry *cache_entry;
   int used_local_entry;
 
@@ -3139,9 +3364,10 @@ int pslog_parse_kvfmt(pslog_shared_state *shared, pslog_field *fields,
 void pslog_vlogf_impl(pslog_logger *log, pslog_level level, const char *msg,
                       const char *kvfmt, va_list ap) {
   const pslog_kvfmt_cache_entry *cache_entry;
-  pslog_kvfmt_cache_entry local_entry;
+  pslog_kvfmt_cache_entry local_entry = {0};
   pslog_logger_impl *impl;
   pslog_shared_state *shared;
+  pslog_level diagnostic_level;
   int saved_errno;
   int used_local_entry;
 
@@ -3167,7 +3393,11 @@ void pslog_vlogf_impl(pslog_logger *log, pslog_level level, const char *msg,
   if (pslog_resolve_kvfmt_entry(shared, kvfmt, &local_entry, &cache_entry) !=
       0) {
     pslog_state_unlock(shared);
-    pslog_log_impl(log, PSLOG_LEVEL_ERROR, "invalid kvfmt", NULL, 0u);
+    diagnostic_level = PSLOG_LEVEL_ERROR;
+    if (level == PSLOG_LEVEL_FATAL || level == PSLOG_LEVEL_PANIC) {
+      diagnostic_level = level;
+    }
+    pslog_log_impl(log, diagnostic_level, "invalid kvfmt", NULL, 0u);
     return;
   }
   used_local_entry = cache_entry == &local_entry;
@@ -3737,7 +3967,7 @@ static pslog_logger *pslog_vwithf_impl(pslog_logger *log, const char *kvfmt,
                                        va_list ap) {
   pslog_logger_impl *impl;
   const pslog_kvfmt_cache_entry *cache_entry;
-  pslog_kvfmt_cache_entry local_entry;
+  pslog_kvfmt_cache_entry local_entry = {0};
   pslog_field fields[PSLOG_KVFMT_MAX_FIELDS];
   size_t count;
   int saved_errno;
@@ -4173,15 +4403,13 @@ static int pslog_tee_close(void *userdata) {
     return 0;
   }
   err = 0;
-  if (tee->first.close != NULL && tee->first.userdata != NULL &&
-      tee->first.owned) {
+  if (tee->first.close != NULL && tee->first.owned) {
     close_err = tee->first.close(tee->first.userdata);
     if (err == 0) {
       err = close_err;
     }
   }
-  if (tee->second.close != NULL && tee->second.userdata != NULL &&
-      tee->second.owned) {
+  if (tee->second.close != NULL && tee->second.owned) {
     close_err = tee->second.close(tee->second.userdata);
     if (err == 0) {
       err = close_err;
@@ -4251,10 +4479,20 @@ static int pslog_observed_close(void *userdata) {
 
   observed = (pslog_observed_output *)userdata;
   if (observed == NULL || observed->target.close == NULL ||
-      observed->target.userdata == NULL || !observed->target.owned) {
+      !observed->target.owned) {
     return 0;
   }
   return observed->target.close(observed->target.userdata);
+}
+
+static int pslog_observed_isatty(void *userdata) {
+  pslog_observed_output *observed;
+
+  observed = (pslog_observed_output *)userdata;
+  if (observed == NULL || observed->target.isatty == NULL) {
+    return 0;
+  }
+  return observed->target.isatty(observed->target.userdata);
 }
 
 static int pslog_parse_bool_value(const char *text, int *value) {

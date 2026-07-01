@@ -243,6 +243,13 @@
       ]
     },
     {
+      "name": "package-source",
+      "configurePreset": "host",
+      "targets": [
+        "package-source"
+      ]
+    },
+    {
       "name": "package-checksums",
       "configurePreset": "host",
       "targets": [
@@ -268,6 +275,13 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "host",
+      "configurePreset": "host",
       "output": {
         "outputOnFailure": true
       }

@@ -11,6 +11,11 @@ else()
 endif()
 
 set(PSLOG_OSXCROSS_BIN_DIR "${PSLOG_OSXCROSS_ROOT}/bin")
+if((NOT DEFINED PSLOG_OSXCROSS_HOST OR PSLOG_OSXCROSS_HOST STREQUAL "")
+   AND DEFINED ENV{CPKT_OSXCROSS_HOST}
+   AND NOT "$ENV{CPKT_OSXCROSS_HOST}" STREQUAL "")
+    set(PSLOG_OSXCROSS_HOST "$ENV{CPKT_OSXCROSS_HOST}")
+endif()
 if(NOT DEFINED PSLOG_OSXCROSS_HOST OR PSLOG_OSXCROSS_HOST STREQUAL "")
     file(GLOB _pslog_osxcross_clangs LIST_DIRECTORIES false
          "${PSLOG_OSXCROSS_BIN_DIR}/arm64-apple-darwin*-clang")
@@ -74,16 +79,19 @@ foreach(_pslog_required_tool
     endif()
 endforeach()
 
-set(_pslog_darwin_linker_flag "--ld-path=${CMAKE_LINKER}")
+set(_pslog_darwin_linker_flag "-fuse-ld=${CMAKE_LINKER}")
 foreach(_pslog_linker_flags
         CMAKE_EXE_LINKER_FLAGS
         CMAKE_SHARED_LINKER_FLAGS
         CMAKE_MODULE_LINKER_FLAGS)
-    if(NOT "${${_pslog_linker_flags}}" MATCHES "(^| )(-fuse-ld=|--ld-path=)")
-        set(${_pslog_linker_flags}
-            "${_pslog_darwin_linker_flag} ${${_pslog_linker_flags}}"
-            CACHE STRING "" FORCE)
-    endif()
+    string(REGEX REPLACE "(^| )--ld-path=[^ ]+" " " _pslog_clean_linker_flags
+        "${${_pslog_linker_flags}}")
+    string(REGEX REPLACE "(^| )-fuse-ld=[^ ]+" " " _pslog_clean_linker_flags
+        "${_pslog_clean_linker_flags}")
+    string(STRIP "${_pslog_clean_linker_flags}" _pslog_clean_linker_flags)
+    set(${_pslog_linker_flags}
+        "${_pslog_darwin_linker_flag} ${_pslog_clean_linker_flags}"
+        CACHE STRING "" FORCE)
 endforeach()
 
 file(GLOB _pslog_osxcross_sdks LIST_DIRECTORIES true

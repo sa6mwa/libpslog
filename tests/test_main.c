@@ -72,6 +72,13 @@ struct null_userdata_tracking_sink {
   size_t len;
 };
 
+struct isatty_tracking_sink {
+  struct memory_sink output;
+  void *expected_userdata;
+  int calls;
+  int wrong_userdata;
+};
+
 struct fake_time_source {
   time_t seconds;
   long nanoseconds;
@@ -84,6 +91,7 @@ struct threaded_log_context {
   int iterations;
   int use_kvfmt;
   int use_withf;
+  int use_double;
   int failed;
   const char *payload;
   const char *kvfmt;
@@ -130,6 +138,29 @@ static int memory_sink_isatty(void *userdata) {
 
 static int memory_sink_isatty_true(void *userdata) {
   (void)userdata;
+  return 1;
+}
+
+static int isatty_tracking_write(void *userdata, const char *data, size_t len,
+                                 size_t *written) {
+  struct isatty_tracking_sink *sink;
+
+  sink = (struct isatty_tracking_sink *)userdata;
+  return memory_sink_write(&sink->output, data, len, written);
+}
+
+static int isatty_tracking_isatty(void *userdata) {
+  struct isatty_tracking_sink *sink;
+
+  sink = (struct isatty_tracking_sink *)userdata;
+  if (sink == NULL) {
+    return 0;
+  }
+  sink->calls += 1;
+  if (userdata != sink->expected_userdata) {
+    sink->wrong_userdata += 1;
+    return 0;
+  }
   return 1;
 }
 
@@ -278,6 +309,24 @@ static int contains_text(const char *haystack, const char *needle) {
   return strstr(haystack, needle) != NULL;
 }
 
+static int contains_bytes(const char *haystack, size_t haystack_len,
+                          const char *needle, size_t needle_len) {
+  size_t i;
+
+  if (needle_len == 0u) {
+    return 1;
+  }
+  if (haystack == NULL || needle == NULL || haystack_len < needle_len) {
+    return 0;
+  }
+  for (i = 0u; i <= haystack_len - needle_len; ++i) {
+    if (memcmp(haystack + i, needle, needle_len) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static int assert_valid_json_lines(const char *text) {
   json_error_t error;
   const char *line_start;
@@ -297,8 +346,8 @@ static int assert_valid_json_lines(const char *text) {
         json_t *value;
 
         memset(&error, 0, sizeof(error));
-        value =
-            json_loadb(line_start, line_len, JSON_REJECT_DUPLICATES, &error);
+        value = json_loadb(line_start, line_len,
+                           JSON_REJECT_DUPLICATES | JSON_ALLOW_NUL, &error);
         if (value == NULL) {
           fprintf(stderr, "invalid json line: %s (line %d, column %d)\n",
                   error.text, error.line, error.column);
@@ -399,15 +448,20 @@ static void *threaded_log_worker(void *userdata) {
         }
       }
     } else {
-      pslog_field fields[3];
-      fields[0] = pslog_i64("tid", (long)ctx->thread_id);
-      fields[1] = pslog_i64("seq", (long)i);
-      if (ctx->payload != NULL) {
-        fields[2] = pslog_str("payload", ctx->payload);
-        ctx->log->info(ctx->log, "thread", fields, 3u);
-      } else {
-        ctx->log->info(ctx->log, "thread", fields, 2u);
+      pslog_field fields[4];
+      size_t field_count;
+
+      field_count = 0u;
+      fields[field_count++] = pslog_i64("tid", (long)ctx->thread_id);
+      fields[field_count++] = pslog_i64("seq", (long)i);
+      if (ctx->use_double) {
+        fields[field_count++] =
+            pslog_f64("ratio", (double)((ctx->thread_id % 4) + 1) + 0.25);
       }
+      if (ctx->payload != NULL) {
+        fields[field_count++] = pslog_str("payload", ctx->payload);
+      }
+      ctx->log->info(ctx->log, "thread", fields, field_count);
     }
   }
   return NULL;
@@ -431,9 +485,9 @@ static void *threaded_time_worker(void *userdata) {
 }
 #endif
 
-static int run_terminating_logger_child(int panic_mode, char *output,
-                                        size_t output_size, int *exit_code,
-                                        int *term_signal) {
+static int run_terminating_logger_child(int panic_mode, pslog_level min_level,
+                                        char *output, size_t output_size,
+                                        int *exit_code, int *term_signal) {
 #if defined(__unix__) || defined(__APPLE__) || defined(__FreeBSD__)
   int pipefd[2];
   pid_t pid;
@@ -460,6 +514,7 @@ static int run_terminating_logger_child(int panic_mode, char *output,
   if (pid == 0) {
     pslog_config config;
     pslog_logger *log;
+    pslog_logger *target;
     pslog_field field;
 
     close(pipefd[0]);
@@ -476,11 +531,18 @@ static int run_terminating_logger_child(int panic_mode, char *output,
     if (log == NULL) {
       _exit(121);
     }
+    target = log;
+    if (min_level != PSLOG_LEVEL_INFO) {
+      target = log->with_level(log, min_level);
+      if (target == NULL) {
+        _exit(123);
+      }
+    }
     field = pslog_str("key", "value");
     if (panic_mode) {
-      log->panic(log, "panic-child", &field, 1u);
+      target->panic(target, "panic-child", &field, 1u);
     } else {
-      log->fatal(log, "fatal-child", &field, 1u);
+      target->fatal(target, "fatal-child", &field, 1u);
     }
     _exit(122);
   }
@@ -512,6 +574,7 @@ static int run_terminating_logger_child(int panic_mode, char *output,
   return -1;
 #else
   (void)panic_mode;
+  (void)min_level;
   (void)output;
   (void)output_size;
   (void)exit_code;
@@ -521,8 +584,9 @@ static int run_terminating_logger_child(int panic_mode, char *output,
 }
 
 static int run_terminating_wrapper_child(int panic_mode, int kvfmt_mode,
-                                         char *output, size_t output_size,
-                                         int *exit_code, int *term_signal) {
+                                         pslog_level min_level, char *output,
+                                         size_t output_size, int *exit_code,
+                                         int *term_signal) {
 #if defined(__unix__) || defined(__APPLE__) || defined(__FreeBSD__)
   int pipefd[2];
   pid_t pid;
@@ -549,6 +613,7 @@ static int run_terminating_wrapper_child(int panic_mode, int kvfmt_mode,
   if (pid == 0) {
     pslog_config config;
     pslog_logger *log;
+    pslog_logger *target;
     pslog_field field;
 
     close(pipefd[0]);
@@ -565,18 +630,27 @@ static int run_terminating_wrapper_child(int panic_mode, int kvfmt_mode,
     if (log == NULL) {
       _exit(121);
     }
+    target = log;
+    if (min_level != PSLOG_LEVEL_INFO) {
+      target = log->with_level(log, min_level);
+      if (target == NULL) {
+        _exit(123);
+      }
+    }
     field = pslog_str("key", "value");
     if (panic_mode) {
       if (kvfmt_mode) {
-        pslog_panicf(log, "panic-child-kvfmt", "key=%s", "value");
+        pslog_panicf(target, "panic-child-kvfmt",
+                     kvfmt_mode == 2 ? "bad" : "key=%s", "value");
       } else {
-        pslog_panic(log, "panic-child-wrapper", &field, 1u);
+        pslog_panic(target, "panic-child-wrapper", &field, 1u);
       }
     } else {
       if (kvfmt_mode) {
-        pslog_fatalf(log, "fatal-child-kvfmt", "key=%s", "value");
+        pslog_fatalf(target, "fatal-child-kvfmt",
+                     kvfmt_mode == 2 ? "bad" : "key=%s", "value");
       } else {
-        pslog_fatal(log, "fatal-child-wrapper", &field, 1u);
+        pslog_fatal(target, "fatal-child-wrapper", &field, 1u);
       }
     }
     _exit(122);
@@ -610,6 +684,7 @@ static int run_terminating_wrapper_child(int panic_mode, int kvfmt_mode,
 #else
   (void)panic_mode;
   (void)kvfmt_mode;
+  (void)min_level;
   (void)output;
   (void)output_size;
   (void)exit_code;
@@ -1251,6 +1326,69 @@ static int test_infof_kvfmt(void) {
   return 0;
 }
 
+static int test_malformed_kvfmt_rejects_suffix_after_verb(void) {
+  struct memory_sink sink;
+  pslog_logger *log;
+  pslog_logger *child;
+
+  reset_sink(&sink);
+  log = new_logger(&sink, PSLOG_MODE_JSON, PSLOG_COLOR_NEVER);
+  TEST_ASSERT(log != NULL);
+
+  log->infof(log, "latency", "latency=%dms", 123);
+  TEST_ASSERT(contains_text(sink.data, "\"msg\":\"invalid kvfmt\""));
+  TEST_ASSERT(!contains_text(sink.data, "\"msg\":\"latency\""));
+  TEST_ASSERT(!contains_text(sink.data, "\"latency\":123"));
+  TEST_ASSERT(assert_valid_json_lines(sink.data) == 0);
+
+  reset_sink(&sink);
+  log->infof(log, "name", "name=%s,", "api");
+  TEST_ASSERT(contains_text(sink.data, "\"msg\":\"invalid kvfmt\""));
+  TEST_ASSERT(!contains_text(sink.data, "\"msg\":\"name\""));
+  TEST_ASSERT(!contains_text(sink.data, "\"name\":\"api\""));
+  TEST_ASSERT(assert_valid_json_lines(sink.data) == 0);
+
+  child = log->withf(log, "latency=%dms", 123);
+  TEST_ASSERT(child == NULL);
+  child = log->withf(log, "name=%s,", "api");
+  TEST_ASSERT(child == NULL);
+
+  log->destroy(log);
+  return 0;
+}
+
+#if !defined(PSLOG_SINGLE_HEADER_TEST)
+static int
+test_parse_kvfmt_null_shared_initializes_local_entry_parse(const char *kvfmt,
+                                                           ...) {
+  pslog_field fields[PSLOG_KVFMT_MAX_FIELDS];
+  size_t count;
+  va_list ap;
+  int rc;
+
+  va_start(ap, kvfmt);
+  rc = pslog_parse_kvfmt(NULL, fields, &count, PSLOG_MODE_JSON, kvfmt, 0, ap);
+  va_end(ap);
+  if (rc != 0) {
+    return 1;
+  }
+  TEST_ASSERT(count == 2u);
+  TEST_ASSERT(fields[0].key_len == 3u);
+  TEST_ASSERT(memcmp(fields[0].key, "key", 3u) == 0);
+  TEST_ASSERT(fields[0].as.string_value != NULL);
+  TEST_ASSERT(strcmp(fields[0].as.string_value, "value") == 0);
+  TEST_ASSERT(fields[1].key_len == 5u);
+  TEST_ASSERT(memcmp(fields[1].key, "count", 5u) == 0);
+  TEST_ASSERT(fields[1].as.signed_value == 42);
+  return 0;
+}
+
+static int test_parse_kvfmt_null_shared_local_entry_is_initialized(void) {
+  return test_parse_kvfmt_null_shared_initializes_local_entry_parse(
+      "key=%s count=%d", "value", 42);
+}
+#endif
+
 static int test_kvfmt_long_key_falls_back_without_overflow(void) {
   struct memory_sink json_sink;
   struct memory_sink console_sink;
@@ -1375,6 +1513,7 @@ static int test_kvfmt_errno_percent_m(void) {
   TEST_ASSERT(contains_text(plain, "error="));
   TEST_ASSERT(contains_text(plain, "count=7"));
   TEST_ASSERT(contains_text(plain, expected));
+  TEST_ASSERT(count_text_occurrences(plain, expected) == 1u);
   TEST_ASSERT(contains_text(console_sink.data, pslog_palette_default()->error));
   console_log->destroy(console_log);
   return 0;
@@ -1449,6 +1588,101 @@ static int test_errno_static_field_prefix_renders_error_text_and_color(void) {
   TEST_ASSERT(contains_text(console_sink.data, pslog_palette_default()->error));
   console_child->destroy(console_child);
   console_root->destroy(console_root);
+  return 0;
+}
+
+static int test_with_preserves_embedded_nul_string_lengths(void) {
+  static const char value[] = {'a', '\0', 'b'};
+  static const char expected[] = {'"', 'b', 'l', 'o',  'b', '"',
+                                  ':', '"', 'a', '\0', 'b', '"'};
+  struct memory_sink sink;
+  pslog_logger *root;
+  pslog_logger *child;
+  pslog_field field;
+
+  memset(&field, 0, sizeof(field));
+  field.key = "blob";
+  field.key_len = 4u;
+  field.value_len = sizeof(value);
+  field.type = PSLOG_FIELD_STRING;
+  field.trusted_key = 1u;
+  field.trusted_value = 1u;
+  field.console_simple_value = 0u;
+  field.as.string_value = value;
+
+  reset_sink(&sink);
+  root = new_logger(&sink, PSLOG_MODE_JSON, PSLOG_COLOR_NEVER);
+  TEST_ASSERT(root != NULL);
+  child = root->with(root, &field, 1u);
+  TEST_ASSERT(child != NULL);
+
+  child->info(child, "derived", NULL, 0u);
+  TEST_ASSERT(contains_text(sink.data, "\"msg\":\"derived\""));
+  TEST_ASSERT(contains_bytes(sink.data, sink.len, expected, sizeof(expected)));
+
+  child->destroy(child);
+  root->destroy(root);
+  return 0;
+}
+
+static int test_with_preserves_untrusted_string_lengths(void) {
+  struct memory_sink sink;
+  pslog_logger *root;
+  pslog_logger *child;
+  pslog_field field;
+
+  field = pslog_str("quoted", "a\"b");
+
+  reset_sink(&sink);
+  root = new_logger(&sink, PSLOG_MODE_JSON, PSLOG_COLOR_NEVER);
+  TEST_ASSERT(root != NULL);
+  child = root->with(root, &field, 1u);
+  TEST_ASSERT(child != NULL);
+
+  child->info(child, "derived", NULL, 0u);
+  TEST_ASSERT(contains_text(sink.data, "\"msg\":\"derived\""));
+  TEST_ASSERT(contains_text(sink.data, "\"quoted\":\"a\\\"b\""));
+
+  child->destroy(child);
+  root->destroy(root);
+  return 0;
+}
+
+static int test_json_untrusted_embedded_nul_string_uses_value_len(void) {
+  static const char value[] = {'a', '\0', 'b'};
+  struct memory_sink plain_sink;
+  struct memory_sink color_sink;
+  pslog_logger *plain;
+  pslog_logger *color;
+  pslog_field field;
+  char stripped[4096];
+
+  memset(&field, 0, sizeof(field));
+  field.key = "blob";
+  field.key_len = 4u;
+  field.value_len = sizeof(value);
+  field.type = PSLOG_FIELD_STRING;
+  field.trusted_key = 1u;
+  field.trusted_value = 0u;
+  field.console_simple_value = 0u;
+  field.as.string_value = value;
+
+  reset_sink(&plain_sink);
+  plain = new_logger(&plain_sink, PSLOG_MODE_JSON, PSLOG_COLOR_NEVER);
+  TEST_ASSERT(plain != NULL);
+  plain->info(plain, "plain", &field, 1u);
+  TEST_ASSERT(contains_text(plain_sink.data, "\"blob\":\"a\\u0000b\""));
+  TEST_ASSERT(assert_valid_json_lines(plain_sink.data) == 0);
+  plain->destroy(plain);
+
+  reset_sink(&color_sink);
+  color = new_logger(&color_sink, PSLOG_MODE_JSON, PSLOG_COLOR_ALWAYS);
+  TEST_ASSERT(color != NULL);
+  color->info(color, "color", &field, 1u);
+  strip_ansi(stripped, sizeof(stripped), color_sink.data);
+  TEST_ASSERT(contains_text(stripped, "\"blob\":\"a\\u0000b\""));
+  TEST_ASSERT(assert_valid_json_lines(stripped) == 0);
+  color->destroy(color);
   return 0;
 }
 
@@ -1983,6 +2217,84 @@ static int test_buffer_reserve_growth_preserves_data(void) {
   return 0;
 }
 
+static int test_buffer_rejects_capacity_overflow(void) {
+  pslog_buffer buffer;
+
+  pslog_buffer_init(&buffer, NULL, 8u);
+  pslog_buffer_append_cstr(&buffer, "abc");
+  TEST_ASSERT(pslog_buffer_reserve(&buffer, (size_t)-1) == -1);
+  TEST_ASSERT(buffer.heap_owned == 0);
+  TEST_ASSERT(buffer.len == 3u);
+  TEST_ASSERT(strcmp(buffer.data, "abc") == 0);
+  pslog_buffer_destroy(&buffer);
+  return 0;
+}
+
+static int test_buffer_exact_inline_capacity_uses_heap_storage(void) {
+  pslog_buffer buffer;
+  size_t inline_payload_capacity;
+
+  memset(&buffer, 0, sizeof(buffer));
+  inline_payload_capacity = sizeof(buffer.inline_data);
+  pslog_buffer_init(&buffer, NULL, inline_payload_capacity);
+  TEST_ASSERT(buffer.capacity == inline_payload_capacity);
+  TEST_ASSERT(buffer.heap_owned == 1);
+  TEST_ASSERT(buffer.data != buffer.inline_data);
+  pslog_buffer_destroy(&buffer);
+  return 0;
+}
+
+static int test_buffer_heap_init_failure_keeps_inline_nul_capacity(void) {
+  pslog_buffer buffer;
+  char payload[PSLOG_DEFAULT_LINE_BUFFER_CAPACITY];
+
+  memset(&buffer, 0, sizeof(buffer));
+  memset(payload, 'x', sizeof(payload));
+  pslog_test_allocator_reset();
+  pslog_test_allocator_fail_after(1u);
+  pslog_buffer_init(&buffer, NULL, sizeof(buffer.inline_data));
+  pslog_test_allocator_fail_after(0u);
+
+  TEST_ASSERT(buffer.heap_owned == 0);
+  TEST_ASSERT(buffer.data == buffer.inline_data);
+  TEST_ASSERT(buffer.capacity == sizeof(buffer.inline_data) - 1u);
+  pslog_buffer_append_n(&buffer, payload, sizeof(payload));
+  TEST_ASSERT(buffer.len == sizeof(payload));
+  TEST_ASSERT(buffer.data[buffer.len] == '\0');
+  pslog_buffer_destroy(&buffer);
+  pslog_test_allocator_reset();
+  return 0;
+}
+
+#if !defined(PSLOG_SINGLE_HEADER_TEST)
+static int test_buffer_fast_char_append_drops_when_local_growth_fails(void) {
+  pslog_buffer buffer;
+  char payload[2048];
+
+  memset(&buffer, 0, sizeof(buffer));
+  memset(payload, 'x', sizeof(payload));
+  pslog_buffer_init(&buffer, NULL, 8u);
+  TEST_ASSERT(pslog_buffer_reserve(&buffer, sizeof(payload)) == 0);
+  TEST_ASSERT(buffer.heap_owned == 1);
+  pslog_buffer_append_n(&buffer, payload, sizeof(payload));
+  TEST_ASSERT(buffer.len == buffer.capacity);
+  TEST_ASSERT(buffer.data[buffer.len] == '\0');
+
+  pslog_test_allocator_reset();
+  pslog_test_allocator_fail_after(1u);
+  PSLOG_BUFFER_APPEND_CHAR_FAST(&buffer, '!');
+  pslog_test_allocator_fail_after(0u);
+
+  TEST_ASSERT(buffer.len == buffer.capacity);
+  TEST_ASSERT(buffer.data[buffer.len] == '\0');
+  TEST_ASSERT(buffer.data[buffer.len - 1u] == 'x');
+
+  pslog_buffer_destroy(&buffer);
+  pslog_test_allocator_reset();
+  return 0;
+}
+#endif
+
 static int test_level_parse_and_string_api(void) {
   pslog_level level;
 
@@ -2045,6 +2357,8 @@ static int test_json_color_additional_paths(void) {
   pslog(log, PSLOG_LEVEL_FATAL, "fatal-generic", "u=%u lu=%lu f=%f p=%p", 7u,
         9ul, 1.5, (void *)&anchor);
   pslog_fields(log, PSLOG_LEVEL_NOLEVEL, "nolevel-generic", NULL, 0u);
+  pslog_fields(log, PSLOG_LEVEL_DISABLED, "disabled-fields", NULL, 0u);
+  pslog(log, PSLOG_LEVEL_DISABLED, "disabled-kvfmt", "u=%u", 99u);
 
   warn_only = pslog_with_level(log, PSLOG_LEVEL_WARN);
   TEST_ASSERT(warn_only != NULL);
@@ -2069,6 +2383,8 @@ static int test_json_color_additional_paths(void) {
   TEST_ASSERT(contains_text(stripped, "\"msg\":\"nolevel-generic\""));
   TEST_ASSERT(contains_text(stripped, "\"msg\":\"annotated-kv\""));
   TEST_ASSERT(contains_text(stripped, "\"loglevel\":\"warn\""));
+  TEST_ASSERT(!contains_text(stripped, "\"msg\":\"disabled-fields\""));
+  TEST_ASSERT(!contains_text(stripped, "\"msg\":\"disabled-kvfmt\""));
   TEST_ASSERT(assert_valid_json_lines(stripped) == 0);
 
   annotated->destroy(annotated);
@@ -2106,6 +2422,23 @@ static int test_json_plain_kvfmt_include_level_field(void) {
   return 0;
 }
 
+static int test_disabled_level_is_not_emitted_by_generic_dispatch(void) {
+  struct memory_sink sink;
+  pslog_logger *log;
+
+  reset_sink(&sink);
+  log = new_logger(&sink, PSLOG_MODE_JSON, PSLOG_COLOR_NEVER);
+  TEST_ASSERT(log != NULL);
+
+  pslog_fields(log, PSLOG_LEVEL_DISABLED, "disabled-fields", NULL, 0u);
+  pslog(log, PSLOG_LEVEL_DISABLED, "disabled-kvfmt", "u=%u", 9u);
+
+  TEST_ASSERT(sink.len == 0u);
+
+  log->destroy(log);
+  return 0;
+}
+
 static int test_console_color_additional_paths(void) {
   struct memory_sink sink;
   pslog_logger *log;
@@ -2114,6 +2447,7 @@ static int test_console_color_additional_paths(void) {
   pslog_field fields[3];
   char stripped[32768];
   char huge_key[256];
+  const char *fallback_value;
 
   reset_sink(&sink);
   log = new_logger(&sink, PSLOG_MODE_CONSOLE, PSLOG_COLOR_ALWAYS);
@@ -2125,12 +2459,12 @@ static int test_console_color_additional_paths(void) {
   memset(fields, 0, sizeof(fields));
   fields[0].key = huge_key;
   fields[0].key_len = strlen(huge_key);
-  fields[0].value_len = 0u;
-  fields[0].type = PSLOG_FIELD_NULL;
+  fields[0].value_len = strlen("fallback-once");
+  fields[0].type = PSLOG_FIELD_STRING;
   fields[0].trusted_key = 1u;
-  fields[0].trusted_value = 0u;
-  fields[0].console_simple_value = 0u;
-  fields[0].as.pointer_value = NULL;
+  fields[0].trusted_value = 1u;
+  fields[0].console_simple_value = 1u;
+  fields[0].as.string_value = "fallback-once";
   fields[1].key = "";
   fields[1].key_len = 0u;
   fields[1].type = PSLOG_FIELD_STRING;
@@ -2160,6 +2494,7 @@ static int test_console_color_additional_paths(void) {
   pslog(annotated, PSLOG_LEVEL_ERROR, "annotated-console", "u=%u", 4u);
 
   strip_ansi(stripped, sizeof(stripped), sink.data);
+  fallback_value = "fallback-once";
   TEST_ASSERT(contains_text(stripped, "fatal-console-generic"));
   TEST_ASSERT(contains_text(stripped, "panic-console-generic"));
   TEST_ASSERT(contains_text(stripped, "nolevel-console"));
@@ -2168,7 +2503,7 @@ static int test_console_color_additional_paths(void) {
   TEST_ASSERT(contains_text(stripped, " u=1"));
   TEST_ASSERT(contains_text(stripped, " lu=2"));
   TEST_ASSERT(contains_text(stripped, " f=3.5"));
-  TEST_ASSERT(contains_text(stripped, "null"));
+  TEST_ASSERT(count_text_occurrences(stripped, fallback_value) == 1u);
   TEST_ASSERT(!contains_text(stripped, " =x"));
 
   annotated->destroy(annotated);
@@ -2195,6 +2530,12 @@ static int test_internal_buffer_helper_paths(void) {
   buffer.data[0] = '\0';
   pslog_buffer_append_double(&buffer, 1.25);
   TEST_ASSERT(contains_text(buffer.data, "1.25"));
+  TEST_ASSERT(pslog_format_double_ascii(buffer.data, sizeof(buffer.inline_data),
+                                        3.5) > 0);
+  TEST_ASSERT(strcmp(buffer.data, "3.5") == 0);
+  strcpy(buffer.data, "3,14159e+00");
+  pslog_normalize_decimal_separator(buffer.data, strlen(buffer.data));
+  TEST_ASSERT(strcmp(buffer.data, "3.14159e+00") == 0);
 
   buffer.len = 0u;
   buffer.data[0] = '\0';
@@ -3365,6 +3706,123 @@ static int test_line_buffer_capacity_override(void) {
   return 0;
 }
 
+static int test_line_buffer_capacity_overflow_is_rejected(void) {
+  struct memory_sink sink;
+  pslog_config config;
+
+  reset_sink(&sink);
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_JSON;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_NEVER;
+  config.line_buffer_capacity = (size_t)-1;
+  config.output.write = memory_sink_write;
+  config.output.close = NULL;
+  config.output.isatty = memory_sink_isatty;
+  config.output.userdata = &sink;
+  TEST_ASSERT(pslog_new(&config) == NULL);
+  return 0;
+}
+
+static int test_with_rejects_field_count_overflow(void) {
+  struct memory_sink sink;
+  pslog_config config;
+  pslog_logger *root;
+  pslog_logger *base;
+  pslog_field field;
+
+  reset_sink(&sink);
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_JSON;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_NEVER;
+  config.output.write = memory_sink_write;
+  config.output.close = NULL;
+  config.output.isatty = memory_sink_isatty;
+  config.output.userdata = &sink;
+  root = pslog_new(&config);
+  TEST_ASSERT(root != NULL);
+
+  field = pslog_str("key", "value");
+  base = root->with(root, &field, 1u);
+  TEST_ASSERT(base != NULL);
+  TEST_ASSERT(base->with(base, &field, (size_t)-1) == NULL);
+
+  base->destroy(base);
+  root->destroy(root);
+  return 0;
+}
+
+static int test_console_prefix_cache_rejects_key_len_overflow(void) {
+  struct memory_sink sink;
+  pslog_config config;
+  pslog_logger *log;
+  pslog_logger_impl *impl;
+  pslog_field field;
+
+  reset_sink(&sink);
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_CONSOLE;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_ALWAYS;
+  config.output.write = memory_sink_write;
+  config.output.close = NULL;
+  config.output.isatty = memory_sink_isatty;
+  config.output.userdata = &sink;
+  log = pslog_new(&config);
+  TEST_ASSERT(log != NULL);
+
+  memset(&field, 0, sizeof(field));
+  field.key = "k";
+  field.key_len = (size_t)-1;
+  field.type = PSLOG_FIELD_STRING;
+  field.as.string_value = "value";
+  field.value_len = 5u;
+
+  impl = (pslog_logger_impl *)log->impl;
+  TEST_ASSERT(impl != NULL);
+  TEST_ASSERT(impl->shared != NULL);
+  TEST_ASSERT(pslog_test_console_prefix_cacheable(impl->shared, &field) == 0);
+
+  log->destroy(log);
+  return 0;
+}
+
+static int test_console_prefix_cache_checks_mutated_key_contents(void) {
+  struct memory_sink sink;
+  pslog_config config;
+  pslog_logger *log;
+  pslog_field field;
+  char key[4];
+
+  reset_sink(&sink);
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_CONSOLE;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_NEVER;
+  config.output.write = memory_sink_write;
+  config.output.close = NULL;
+  config.output.isatty = memory_sink_isatty;
+  config.output.userdata = &sink;
+  log = pslog_new(&config);
+  TEST_ASSERT(log != NULL);
+
+  memcpy(key, "foo", sizeof(key));
+  field = pslog_str(key, "one");
+  log->info(log, "first", &field, 1u);
+
+  memcpy(key, "bar", sizeof(key));
+  field = pslog_str(key, "two");
+  log->info(log, "second", &field, 1u);
+
+  TEST_ASSERT(contains_text(sink.data, "foo=one"));
+  TEST_ASSERT(contains_text(sink.data, "bar=two"));
+  TEST_ASSERT(!contains_text(sink.data, "foo=two"));
+
+  log->destroy(log);
+  return 0;
+}
+
 static int test_zero_alloc_hot_path_emission(void) {
   static const pslog_mode modes[] = {PSLOG_MODE_CONSOLE, PSLOG_MODE_JSON};
   static const pslog_color_mode colors[] = {PSLOG_COLOR_NEVER,
@@ -4001,15 +4459,17 @@ static int test_fatal_and_panic_termination(void) {
   int exit_code;
   int term_signal;
 
-  TEST_ASSERT(run_terminating_logger_child(0, output, sizeof(output),
-                                           &exit_code, &term_signal) == 0);
+  TEST_ASSERT(run_terminating_logger_child(0, PSLOG_LEVEL_INFO, output,
+                                           sizeof(output), &exit_code,
+                                           &term_signal) == 0);
   TEST_ASSERT(exit_code == 1);
   TEST_ASSERT(term_signal == 0);
   TEST_ASSERT(contains_text(output, "\"msg\":\"fatal-child\""));
   TEST_ASSERT(contains_text(output, "\"key\":\"value\""));
 
-  TEST_ASSERT(run_terminating_logger_child(1, output, sizeof(output),
-                                           &exit_code, &term_signal) == 0);
+  TEST_ASSERT(run_terminating_logger_child(1, PSLOG_LEVEL_INFO, output,
+                                           sizeof(output), &exit_code,
+                                           &term_signal) == 0);
   TEST_ASSERT(exit_code == -1);
   TEST_ASSERT(term_signal == SIGABRT);
   TEST_ASSERT(contains_text(output, "\"msg\":\"panic-child\""));
@@ -4026,33 +4486,110 @@ static int test_fatal_and_panic_free_wrappers_termination(void) {
   int exit_code;
   int term_signal;
 
-  TEST_ASSERT(run_terminating_wrapper_child(0, 0, output, sizeof(output),
-                                            &exit_code, &term_signal) == 0);
+  TEST_ASSERT(run_terminating_wrapper_child(0, 0, PSLOG_LEVEL_INFO, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
   TEST_ASSERT(exit_code == 1);
   TEST_ASSERT(term_signal == 0);
   TEST_ASSERT(contains_text(output, "\"msg\":\"fatal-child-wrapper\""));
   TEST_ASSERT(contains_text(output, "\"key\":\"value\""));
 
-  TEST_ASSERT(run_terminating_wrapper_child(0, 1, output, sizeof(output),
-                                            &exit_code, &term_signal) == 0);
+  TEST_ASSERT(run_terminating_wrapper_child(0, 1, PSLOG_LEVEL_INFO, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
   TEST_ASSERT(exit_code == 1);
   TEST_ASSERT(term_signal == 0);
   TEST_ASSERT(contains_text(output, "\"msg\":\"fatal-child-kvfmt\""));
   TEST_ASSERT(contains_text(output, "\"key\":\"value\""));
 
-  TEST_ASSERT(run_terminating_wrapper_child(1, 0, output, sizeof(output),
-                                            &exit_code, &term_signal) == 0);
+  TEST_ASSERT(run_terminating_wrapper_child(1, 0, PSLOG_LEVEL_INFO, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
   TEST_ASSERT(exit_code == -1);
   TEST_ASSERT(term_signal == SIGABRT);
   TEST_ASSERT(contains_text(output, "\"msg\":\"panic-child-wrapper\""));
   TEST_ASSERT(contains_text(output, "\"key\":\"value\""));
 
-  TEST_ASSERT(run_terminating_wrapper_child(1, 1, output, sizeof(output),
-                                            &exit_code, &term_signal) == 0);
+  TEST_ASSERT(run_terminating_wrapper_child(1, 1, PSLOG_LEVEL_INFO, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
   TEST_ASSERT(exit_code == -1);
   TEST_ASSERT(term_signal == SIGABRT);
   TEST_ASSERT(contains_text(output, "\"msg\":\"panic-child-kvfmt\""));
   TEST_ASSERT(contains_text(output, "\"key\":\"value\""));
+#endif
+  return 0;
+}
+
+static int test_fatal_and_panic_bypass_disabled_threshold(void) {
+#if defined(PSLOG_COVERAGE_BUILD)
+  return 0;
+#elif defined(__unix__) || defined(__APPLE__) || defined(__FreeBSD__)
+  char output[4096];
+  int exit_code;
+  int term_signal;
+
+  TEST_ASSERT(run_terminating_logger_child(0, PSLOG_LEVEL_DISABLED, output,
+                                           sizeof(output), &exit_code,
+                                           &term_signal) == 0);
+  TEST_ASSERT(exit_code == 1);
+  TEST_ASSERT(term_signal == 0);
+  TEST_ASSERT(contains_text(output, "\"msg\":\"fatal-child\""));
+  TEST_ASSERT(contains_text(output, "\"lvl\":\"fatal\""));
+
+  TEST_ASSERT(run_terminating_logger_child(1, PSLOG_LEVEL_DISABLED, output,
+                                           sizeof(output), &exit_code,
+                                           &term_signal) == 0);
+  TEST_ASSERT(exit_code == -1);
+  TEST_ASSERT(term_signal == SIGABRT);
+  TEST_ASSERT(contains_text(output, "\"msg\":\"panic-child\""));
+  TEST_ASSERT(contains_text(output, "\"lvl\":\"panic\""));
+
+  TEST_ASSERT(run_terminating_wrapper_child(0, 1, PSLOG_LEVEL_DISABLED, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
+  TEST_ASSERT(exit_code == 1);
+  TEST_ASSERT(term_signal == 0);
+  TEST_ASSERT(contains_text(output, "\"msg\":\"fatal-child-kvfmt\""));
+  TEST_ASSERT(contains_text(output, "\"lvl\":\"fatal\""));
+
+  TEST_ASSERT(run_terminating_wrapper_child(1, 1, PSLOG_LEVEL_DISABLED, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
+  TEST_ASSERT(exit_code == -1);
+  TEST_ASSERT(term_signal == SIGABRT);
+  TEST_ASSERT(contains_text(output, "\"msg\":\"panic-child-kvfmt\""));
+  TEST_ASSERT(contains_text(output, "\"lvl\":\"panic\""));
+#endif
+  return 0;
+}
+
+static int
+test_malformed_kvfmt_fatal_and_panic_still_diagnose_when_disabled(void) {
+#if defined(PSLOG_COVERAGE_BUILD)
+  return 0;
+#elif defined(__unix__) || defined(__APPLE__) || defined(__FreeBSD__)
+  char output[4096];
+  int exit_code;
+  int term_signal;
+
+  TEST_ASSERT(run_terminating_wrapper_child(0, 2, PSLOG_LEVEL_DISABLED, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
+  TEST_ASSERT(exit_code == 1);
+  TEST_ASSERT(term_signal == 0);
+  TEST_ASSERT(contains_text(output, "\"msg\":\"invalid kvfmt\""));
+  TEST_ASSERT(contains_text(output, "\"lvl\":\"fatal\""));
+  TEST_ASSERT(!contains_text(output, "\"msg\":\"fatal-child-kvfmt\""));
+
+  TEST_ASSERT(run_terminating_wrapper_child(1, 2, PSLOG_LEVEL_DISABLED, output,
+                                            sizeof(output), &exit_code,
+                                            &term_signal) == 0);
+  TEST_ASSERT(exit_code == -1);
+  TEST_ASSERT(term_signal == SIGABRT);
+  TEST_ASSERT(contains_text(output, "\"msg\":\"invalid kvfmt\""));
+  TEST_ASSERT(contains_text(output, "\"lvl\":\"panic\""));
+  TEST_ASSERT(!contains_text(output, "\"msg\":\"panic-child-kvfmt\""));
 #endif
   return 0;
 }
@@ -4310,6 +4847,7 @@ static int test_thread_safe_shared_logger(void) {
     ctx[i].iterations = 120;
     ctx[i].use_kvfmt = (i % 2u) ? 1 : 0;
     ctx[i].use_withf = 0;
+    ctx[i].use_double = 0;
     ctx[i].failed = 0;
     ctx[i].payload = NULL;
     ctx[i].kvfmt = NULL;
@@ -4379,6 +4917,7 @@ static int test_thread_safe_chunked_shared_logger(void) {
     ctx[i].iterations = 40;
     ctx[i].use_kvfmt = (i % 2u) ? 1 : 0;
     ctx[i].use_withf = 0;
+    ctx[i].use_double = 0;
     ctx[i].failed = 0;
     ctx[i].payload = payload;
     ctx[i].kvfmt = NULL;
@@ -4402,6 +4941,60 @@ static int test_thread_safe_chunked_shared_logger(void) {
 
   shared->destroy(shared);
   root->destroy(root);
+  return 0;
+#else
+  return 0;
+#endif
+}
+
+static int test_thread_safe_console_and_double_caches(void) {
+#if defined(__unix__) || defined(__APPLE__) || defined(__FreeBSD__)
+  struct memory_sink sink;
+  pslog_config config;
+  pslog_logger *log;
+  pthread_t threads[6];
+  struct threaded_log_context ctx[6];
+  size_t i;
+  size_t expected;
+
+  reset_sink(&sink);
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_CONSOLE;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_NEVER;
+  config.output.write = memory_sink_write;
+  config.output.close = NULL;
+  config.output.isatty = memory_sink_isatty;
+  config.output.userdata = &sink;
+
+  log = pslog_new(&config);
+  TEST_ASSERT(log != NULL);
+
+  expected = 0u;
+  for (i = 0u; i < sizeof(threads) / sizeof(threads[0]); ++i) {
+    ctx[i].log = log;
+    ctx[i].thread_id = (int)i;
+    ctx[i].iterations = 120;
+    ctx[i].use_kvfmt = 0;
+    ctx[i].use_withf = 0;
+    ctx[i].use_double = 1;
+    ctx[i].failed = 0;
+    ctx[i].payload = NULL;
+    ctx[i].kvfmt = NULL;
+    expected += (size_t)ctx[i].iterations;
+    TEST_ASSERT(pthread_create(&threads[i], (pthread_attr_t *)0,
+                               threaded_log_worker, &ctx[i]) == 0);
+  }
+  for (i = 0u; i < sizeof(threads) / sizeof(threads[0]); ++i) {
+    TEST_ASSERT(pthread_join(threads[i], (void **)0) == 0);
+    TEST_ASSERT(ctx[i].failed == 0);
+  }
+
+  TEST_ASSERT(count_text_occurrences(sink.data, "thread") == expected);
+  TEST_ASSERT(count_text_occurrences(sink.data, "ratio=") == expected);
+  TEST_ASSERT(count_text_occurrences(sink.data, "\n") == expected);
+
+  log->destroy(log);
   return 0;
 #else
   return 0;
@@ -4444,6 +5037,7 @@ static int test_thread_safe_kvfmt_cache_entry_lifetime(void) {
     ctx[i].iterations = 300;
     ctx[i].use_kvfmt = 1;
     ctx[i].use_withf = 0;
+    ctx[i].use_double = 0;
     ctx[i].failed = 0;
     ctx[i].payload = "payload";
     ctx[i].kvfmt = kvfmts[i];
@@ -4506,6 +5100,7 @@ static int test_thread_safe_withf_kvfmt_cache_entry_lifetime(void) {
     ctx[i].iterations = 200;
     ctx[i].use_kvfmt = 1;
     ctx[i].use_withf = 1;
+    ctx[i].use_double = 0;
     ctx[i].failed = 0;
     ctx[i].payload = "payload";
     ctx[i].kvfmt = kvfmts[i];
@@ -4704,6 +5299,37 @@ static int test_observed_output_reports_error(void) {
   return 0;
 }
 
+static int test_observed_output_color_auto_forwards_isatty_userdata(void) {
+  struct isatty_tracking_sink sink;
+  pslog_config config;
+  pslog_logger *log;
+  pslog_observed_output observed;
+
+  memset(&sink, 0, sizeof(sink));
+  reset_sink(&sink.output);
+  sink.expected_userdata = &sink;
+
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_CONSOLE;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_AUTO;
+  config.output.write = isatty_tracking_write;
+  config.output.close = NULL;
+  config.output.isatty = isatty_tracking_isatty;
+  config.output.userdata = &sink;
+  pslog_observed_output_init(&observed, &config.output, NULL, NULL);
+  config.output = observed.output;
+
+  log = pslog_new(&config);
+  TEST_ASSERT(log != NULL);
+  TEST_ASSERT(sink.calls == 1);
+  TEST_ASSERT(sink.wrong_userdata == 0);
+  log->info(log, "observed-color", NULL, 0u);
+  TEST_ASSERT(contains_text(sink.output.data, "\x1b["));
+  log->destroy(log);
+  return 0;
+}
+
 static int test_short_write_retries_small_line(void) {
   struct short_write_memory_sink sink;
   pslog_config config;
@@ -4857,6 +5483,31 @@ static int test_close_calls_owned_output_with_null_userdata(void) {
   return 0;
 }
 
+static int
+test_with_zero_length_bytes_field_does_not_free_borrowed_pointer(void) {
+  static const unsigned char sentinel[] = {'x'};
+  pslog_config config;
+  pslog_logger *root;
+  pslog_logger *child;
+  pslog_field field;
+
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_JSON;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_NEVER;
+
+  root = pslog_new(&config);
+  TEST_ASSERT(root != NULL);
+
+  field = pslog_bytes_field("blob", sentinel, 0u);
+  child = root->with(root, &field, 1u);
+  TEST_ASSERT(child != NULL);
+
+  child->destroy(child);
+  root->destroy(root);
+  return 0;
+}
+
 static int test_observed_output_close_ownership(void) {
   struct close_tracking_sink user_sink;
   struct partial_sink owned_sink;
@@ -4901,6 +5552,25 @@ static int test_observed_output_close_ownership(void) {
   TEST_ASSERT(log != NULL);
   TEST_ASSERT(log->close(log) == 0);
   TEST_ASSERT(owned_sink.closes == 1);
+  log->destroy(log);
+
+  reset_null_userdata_sink();
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_JSON;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_NEVER;
+  config.output.write = null_userdata_write;
+  config.output.close = null_userdata_close;
+  config.output.isatty = NULL;
+  config.output.userdata = NULL;
+  config.output.owned = 1;
+  pslog_observed_output_init(&observed, &config.output, NULL, NULL);
+  config.output = observed.output;
+
+  log = pslog_new(&config);
+  TEST_ASSERT(log != NULL);
+  TEST_ASSERT(log->close(log) == 0);
+  TEST_ASSERT(g_null_userdata_sink.closes == 1);
   log->destroy(log);
   return 0;
 }
@@ -5020,6 +5690,52 @@ static int test_env_output_default_tee_keeps_reused_owned_sink_open(void) {
   remove(path);
 
   TEST_ASSERT(contains_text(file_data, "\"msg\":\"tee_default\""));
+  return 0;
+}
+
+static int test_env_output_default_tee_closes_owned_null_userdata_sink(void) {
+  pslog_config config;
+  pslog_logger *log;
+  FILE *fp;
+  char path[L_tmpnam + 16];
+  char env_value[L_tmpnam + 32];
+  char file_data[4096];
+  size_t nread;
+
+  reset_null_userdata_sink();
+  make_temp_path(path, sizeof(path));
+  strcpy(env_value, "default+");
+  strcat(env_value, path);
+
+  pslog_default_config(&config);
+  config.mode = PSLOG_MODE_JSON;
+  config.timestamps = 0;
+  config.color = PSLOG_COLOR_NEVER;
+  config.output.write = null_userdata_write;
+  config.output.close = null_userdata_close;
+  config.output.isatty = NULL;
+  config.output.userdata = NULL;
+  config.output.owned = 1;
+
+  set_env_value("LOG_OUTPUT", env_value);
+  log = pslog_new_from_env(NULL, &config);
+  TEST_ASSERT(log != NULL);
+  TEST_ASSERT(g_null_userdata_sink.closes == 0);
+  log->info(log, "tee_default_null_userdata", NULL, 0u);
+  log->destroy(log);
+  unset_env_value("LOG_OUTPUT");
+
+  TEST_ASSERT(g_null_userdata_sink.closes == 1);
+
+  fp = fopen(path, "rb");
+  TEST_ASSERT(fp != NULL);
+  nread = fread(file_data, 1u, sizeof(file_data) - 1u, fp);
+  file_data[nread] = '\0';
+  fclose(fp);
+  remove(path);
+
+  TEST_ASSERT(
+      contains_text(file_data, "\"msg\":\"tee_default_null_userdata\""));
   return 0;
 }
 
@@ -5401,6 +6117,14 @@ int main(void) {
   if (test_infof_kvfmt() != 0) {
     return 1;
   }
+  if (test_malformed_kvfmt_rejects_suffix_after_verb() != 0) {
+    return 1;
+  }
+#if !defined(PSLOG_SINGLE_HEADER_TEST)
+  if (test_parse_kvfmt_null_shared_local_entry_is_initialized() != 0) {
+    return 1;
+  }
+#endif
   if (test_kvfmt_long_key_falls_back_without_overflow() != 0) {
     return 1;
   }
@@ -5467,6 +6191,20 @@ int main(void) {
   if (test_buffer_reserve_growth_preserves_data() != 0) {
     return 1;
   }
+  if (test_buffer_rejects_capacity_overflow() != 0) {
+    return 1;
+  }
+  if (test_buffer_exact_inline_capacity_uses_heap_storage() != 0) {
+    return 1;
+  }
+  if (test_buffer_heap_init_failure_keeps_inline_nul_capacity() != 0) {
+    return 1;
+  }
+#if !defined(PSLOG_SINGLE_HEADER_TEST)
+  if (test_buffer_fast_char_append_drops_when_local_growth_fails() != 0) {
+    return 1;
+  }
+#endif
   if (test_level_parse_and_string_api() != 0) {
     return 1;
   }
@@ -5483,6 +6221,9 @@ int main(void) {
     return 1;
   }
   if (test_with_level_controls() != 0) {
+    return 1;
+  }
+  if (test_disabled_level_is_not_emitted_by_generic_dispatch() != 0) {
     return 1;
   }
   if (test_constructor_with_level_field_matches_derived_logger() != 0) {
@@ -5560,6 +6301,27 @@ int main(void) {
   if (test_line_buffer_capacity_override() != 0) {
     return 1;
   }
+  if (test_line_buffer_capacity_overflow_is_rejected() != 0) {
+    return 1;
+  }
+  if (test_with_rejects_field_count_overflow() != 0) {
+    return 1;
+  }
+  if (test_console_prefix_cache_rejects_key_len_overflow() != 0) {
+    return 1;
+  }
+  if (test_console_prefix_cache_checks_mutated_key_contents() != 0) {
+    return 1;
+  }
+  if (test_with_preserves_embedded_nul_string_lengths() != 0) {
+    return 1;
+  }
+  if (test_with_preserves_untrusted_string_lengths() != 0) {
+    return 1;
+  }
+  if (test_json_untrusted_embedded_nul_string_uses_value_len() != 0) {
+    return 1;
+  }
   if (test_zero_alloc_hot_path_emission() != 0) {
     return 1;
   }
@@ -5576,6 +6338,13 @@ int main(void) {
     return 1;
   }
   if (test_fatal_and_panic_free_wrappers_termination() != 0) {
+    return 1;
+  }
+  if (test_fatal_and_panic_bypass_disabled_threshold() != 0) {
+    return 1;
+  }
+  if (test_malformed_kvfmt_fatal_and_panic_still_diagnose_when_disabled() !=
+      0) {
     return 1;
   }
   if (test_logger_variants_coverage() != 0) {
@@ -5602,6 +6371,9 @@ int main(void) {
   if (test_thread_safe_chunked_shared_logger() != 0) {
     return 1;
   }
+  if (test_thread_safe_console_and_double_caches() != 0) {
+    return 1;
+  }
   if (test_thread_safe_kvfmt_cache_entry_lifetime() != 0) {
     return 1;
   }
@@ -5620,6 +6392,9 @@ int main(void) {
   if (test_observed_output_reports_error() != 0) {
     return 1;
   }
+  if (test_observed_output_color_auto_forwards_isatty_userdata() != 0) {
+    return 1;
+  }
   if (test_short_write_retries_small_line() != 0) {
     return 1;
   }
@@ -5635,6 +6410,9 @@ int main(void) {
   if (test_close_calls_owned_output_with_null_userdata() != 0) {
     return 1;
   }
+  if (test_with_zero_length_bytes_field_does_not_free_borrowed_pointer() != 0) {
+    return 1;
+  }
   if (test_observed_output_close_ownership() != 0) {
     return 1;
   }
@@ -5645,6 +6423,9 @@ int main(void) {
     return 1;
   }
   if (test_env_output_default_tee_keeps_reused_owned_sink_open() != 0) {
+    return 1;
+  }
+  if (test_env_output_default_tee_closes_owned_null_userdata_sink() != 0) {
     return 1;
   }
   if (test_close_on_child_does_not_close_root_owned_output() != 0) {

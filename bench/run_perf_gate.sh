@@ -11,21 +11,6 @@ require_command() {
     fi
 }
 
-extract_ns() {
-    awk 'match($0, /[0-9]+(\.[0-9]+)? ns\/op/) { print substr($0, RSTART, RLENGTH-6); exit }'
-}
-
-assert_lt() {
-    local lhs="$1"
-    local rhs="$2"
-    local label="$3"
-
-    awk -v lhs="$lhs" -v rhs="$rhs" 'BEGIN { exit !(lhs + 0 < rhs + 0) }' || {
-        printf 'performance gate failed: %s (lhs=%s rhs=%s)\n' "$label" "$lhs" "$rhs" >&2
-        exit 1
-    }
-}
-
 run_go_bench() {
     local pattern="$1"
     local out_file="$2"
@@ -35,8 +20,16 @@ run_go_bench() {
     (
         trap 'rm -rf "$tmpcache"' EXIT
         cd "$repo_root/gobencher"
-        GOCACHE="$tmpcache" go test ./benchmark -run '^$' -bench "$pattern" -benchmem -benchtime=200ms -count=1
+        GOCACHE="$tmpcache" go test ./benchmark -run '^$' -bench "$pattern" -benchmem -benchtime="$PSLOG_PERF_GO_BENCHTIME" -count=1
     ) | tee "$out_file"
+}
+
+run_maybe_pinned() {
+    if [ -n "$PSLOG_PERF_CPU" ] && command -v taskset >/dev/null 2>&1; then
+        taskset -c "$PSLOG_PERF_CPU" "$@"
+    else
+        "$@"
+    fi
 }
 
 require_command cmake
@@ -45,62 +38,91 @@ require_command go
 require_command awk
 require_command mktemp
 
+PSLOG_PERF_C_ITERS="${PSLOG_PERF_C_ITERS:-200000}"
+PSLOG_PERF_C_TOLERANCE="${PSLOG_PERF_C_TOLERANCE:-0.50}"
+PSLOG_PERF_LUA_TOLERANCE="${PSLOG_PERF_LUA_TOLERANCE:-0.50}"
+PSLOG_PERF_GO_BENCHTIME="${PSLOG_PERF_GO_BENCHTIME:-200ms}"
+PSLOG_PERF_CPU="${PSLOG_PERF_CPU:-0}"
+
+c_baseline="$repo_root/performance-logs/pure-c-baseline.txt"
+lua_baseline="$repo_root/performance-logs/lua-baseline.txt"
+pure_c_out="$(mktemp)"
+lua_out="$(mktemp)"
+go_compare_out="$(mktemp)"
+trap 'rm -f "$pure_c_out" "$lua_out" "$go_compare_out"' EXIT
+
 cd "$repo_root"
 
 cmake --preset host \
   -DPSLOG_BENCHMARK_WITH_LIBLOGGER=OFF \
   -DPSLOG_BENCHMARK_WITH_QUILL=OFF
 cmake --build --preset host
-ctest --preset debug
+ctest --preset host
+make lua-rock
 
-printf '\n== gobencher C path smoke tests ==\n'
+printf '\n== pure C regression gate ==\n'
+run_maybe_pinned ./build/host/pslog_bench "$PSLOG_PERF_C_ITERS" all | tee "$pure_c_out"
+"$repo_root/bench/check_perf_baseline.sh" "$c_baseline" "$pure_c_out" \
+  "$PSLOG_PERF_C_TOLERANCE" ns/op \
+  console_api \
+  console_prepared \
+  consolecolor_api \
+  consolecolor_prepared \
+  json_api \
+  json_prepared \
+  jsoncolor_api \
+  jsoncolor_prepared \
+  console_prod_log_fields \
+  console_prod_with_log_fields \
+  console_prod_log_fields_build \
+  console_prod_with_log_fields_build \
+  console_prod_level_fields_build \
+  console_prod_with_level_fields_build \
+  console_prod_levelf_kvfmt \
+  console_prod_with_levelf_kvfmt \
+  consolecolor_prod_log_fields \
+  consolecolor_prod_with_log_fields \
+  consolecolor_prod_log_fields_build \
+  consolecolor_prod_with_log_fields_build \
+  consolecolor_prod_level_fields_build \
+  consolecolor_prod_with_level_fields_build \
+  consolecolor_prod_levelf_kvfmt \
+  consolecolor_prod_with_levelf_kvfmt \
+  json_prod_log_fields \
+  json_prod_with_log_fields \
+  json_prod_log_fields_build \
+  json_prod_with_log_fields_build \
+  json_prod_level_fields_build \
+  json_prod_with_level_fields_build \
+  json_prod_levelf_kvfmt \
+  json_prod_with_levelf_kvfmt \
+  jsoncolor_prod_log_fields \
+  jsoncolor_prod_with_log_fields \
+  jsoncolor_prod_log_fields_build \
+  jsoncolor_prod_with_log_fields_build \
+  jsoncolor_prod_level_fields_build \
+  jsoncolor_prod_with_level_fields_build \
+  jsoncolor_prod_levelf_kvfmt \
+  jsoncolor_prod_with_levelf_kvfmt
+
+printf '\n== gobencher C/Lua smoke tests ==\n'
 tmpcache="$(mktemp -d)"
 (
     trap 'rm -rf "$tmpcache"' EXIT
     cd "$repo_root/gobencher"
-    GOCACHE="$tmpcache" go test ./benchmark -run '^Test(C(LoggerWithPrepared|LoggerPublicWrites|CPublicPreparedParityFixed|CProductionPreparedOutputParity)|CKVFmt(Fixed|Production)OutputParity)$' -count=1
+    GOCACHE="$tmpcache" go test ./benchmark -run '^Test(C(LoggerWithPrepared|LoggerPublicWrites|CPublicPreparedParityFixed|CProductionPreparedOutputParity)|CKVFmt(Fixed|Production)OutputParity|LuaPreparedBenchmarkBridgeMatchesRawRun|LuaPreparedTableBenchmarkBridgeMatchesRawRun)$' -count=1
 )
 
-prod_out="$(mktemp)"
-fixed_out="$(mktemp)"
-trap 'rm -f "$prod_out" "$fixed_out"' EXIT
+printf '\n== Lua regression gate ==\n'
+run_go_bench 'Benchmark(ProductionCompare|FixedCompare|LuaTableForm)' "$lua_out"
+"$repo_root/bench/check_perf_baseline.sh" "$lua_baseline" "$lua_out" \
+  "$PSLOG_PERF_LUA_TOLERANCE" c_ns/op \
+  BenchmarkProductionCompare/jsonLua \
+  BenchmarkFixedCompare/jsonLua \
+  BenchmarkLuaTableForm/Production \
+  BenchmarkLuaTableForm/Fixed
 
-printf '\n== gobencher production compare ==\n'
-run_go_bench 'BenchmarkProductionCompare/(jsonGo|jsonC|jsonCkvfmt|jsoncolorGo|jsoncolorC|consoleGo|consoleC|consolecolorGo|consolecolorC)$' "$prod_out"
-
-printf '\n== gobencher fixed compare ==\n'
-run_go_bench 'BenchmarkFixedCompare/(jsonGo|jsonC|jsonCkvfmt|jsoncolorGo|jsoncolorC|consoleGo|consoleC|consolecolorGo|consolecolorC)$' "$fixed_out"
-
-prod_json_go="$(grep 'BenchmarkProductionCompare/jsonGo-' "$prod_out" | extract_ns)"
-prod_json_c="$(grep 'BenchmarkProductionCompare/jsonC-' "$prod_out" | extract_ns)"
-prod_json_ckvfmt="$(grep 'BenchmarkProductionCompare/jsonCkvfmt-' "$prod_out" | extract_ns)"
-prod_jsoncolor_go="$(grep 'BenchmarkProductionCompare/jsoncolorGo-' "$prod_out" | extract_ns)"
-prod_jsoncolor_c="$(grep 'BenchmarkProductionCompare/jsoncolorC-' "$prod_out" | extract_ns)"
-prod_console_go="$(grep 'BenchmarkProductionCompare/consoleGo-' "$prod_out" | extract_ns)"
-prod_console_c="$(grep 'BenchmarkProductionCompare/consoleC-' "$prod_out" | extract_ns)"
-prod_consolecolor_go="$(grep 'BenchmarkProductionCompare/consolecolorGo-' "$prod_out" | extract_ns)"
-prod_consolecolor_c="$(grep 'BenchmarkProductionCompare/consolecolorC-' "$prod_out" | extract_ns)"
-
-fixed_json_go="$(grep 'BenchmarkFixedCompare/jsonGo-' "$fixed_out" | extract_ns)"
-fixed_json_c="$(grep 'BenchmarkFixedCompare/jsonC-' "$fixed_out" | extract_ns)"
-fixed_json_ckvfmt="$(grep 'BenchmarkFixedCompare/jsonCkvfmt-' "$fixed_out" | extract_ns)"
-fixed_jsoncolor_go="$(grep 'BenchmarkFixedCompare/jsoncolorGo-' "$fixed_out" | extract_ns)"
-fixed_jsoncolor_c="$(grep 'BenchmarkFixedCompare/jsoncolorC-' "$fixed_out" | extract_ns)"
-fixed_console_go="$(grep 'BenchmarkFixedCompare/consoleGo-' "$fixed_out" | extract_ns)"
-fixed_console_c="$(grep 'BenchmarkFixedCompare/consoleC-' "$fixed_out" | extract_ns)"
-fixed_consolecolor_go="$(grep 'BenchmarkFixedCompare/consolecolorGo-' "$fixed_out" | extract_ns)"
-fixed_consolecolor_c="$(grep 'BenchmarkFixedCompare/consolecolorC-' "$fixed_out" | extract_ns)"
-
-assert_lt "$prod_json_c" "$prod_json_go" "production jsonC < jsonGo"
-assert_lt "$prod_json_ckvfmt" "$prod_json_go" "production jsonCkvfmt < jsonGo"
-assert_lt "$prod_jsoncolor_c" "$prod_jsoncolor_go" "production jsoncolorC < jsoncolorGo"
-assert_lt "$prod_console_c" "$prod_console_go" "production consoleC < consoleGo"
-assert_lt "$prod_consolecolor_c" "$prod_consolecolor_go" "production consolecolorC < consolecolorGo"
-
-assert_lt "$fixed_json_c" "$fixed_json_go" "fixed jsonC < jsonGo"
-assert_lt "$fixed_json_ckvfmt" "$fixed_json_go" "fixed jsonCkvfmt < jsonGo"
-assert_lt "$fixed_jsoncolor_c" "$fixed_jsoncolor_go" "fixed jsoncolorC < jsoncolorGo"
-assert_lt "$fixed_console_c" "$fixed_console_go" "fixed consoleC < consoleGo"
-assert_lt "$fixed_consolecolor_c" "$fixed_consolecolor_go" "fixed consolecolorC < consolecolorGo"
+printf '\n== observational Go-vs-C compare ==\n'
+run_go_bench 'Benchmark(Production|Fixed)Compare/(jsonGo|jsonC|jsonCkvfmt|jsoncolorGo|jsoncolorC|consoleGo|consoleC|consolecolorGo|consolecolorC)$' "$go_compare_out"
 
 printf '\nPerformance gate passed.\n'

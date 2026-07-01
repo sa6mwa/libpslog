@@ -8,13 +8,19 @@ description = {
   summary = "Lua binding for libpslog",
   detailed = [[
 Go-style Lua logging binding for libpslog. The module is required as "pslog"
-inside Lua and compiles its bundled C core from the libpslog source tree.
+inside Lua and links its C binding against the public libpslog shared library.
 ]],
   homepage = "https://github.com/sa6mwa/libpslog",
   license = "MIT",
 }
 dependencies = {
   "lua >= 5.5, < 5.6",
+}
+external_dependencies = {
+  LIBPSLOG = {
+    header = "pslog.h",
+    library = "pslog",
+  },
 }
 build = {
   type = "builtin",
@@ -26,14 +32,6 @@ build = {
     ["pslog.core"] = {
       sources = {
         "lua/src/pslog_lua.c",
-        "src/pslog.c",
-        "src/pslog_emit_console.c",
-        "src/pslog_emit_json.c",
-        "src/pslog_palette.c",
-      },
-      incdirs = {
-        "include",
-        "src",
       },
       defines = {
         "PSLOG_VERSION_MAJOR=@PSLOG_VERSION_MAJOR@",
@@ -43,6 +41,7 @@ build = {
         "_POSIX_C_SOURCE=200809L",
       },
       libraries = {
+        "pslog",
         "pthread",
       },
     },

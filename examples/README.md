@@ -11,7 +11,7 @@ cmake --preset host
 cmake --build --preset host
 cd examples
 cc -I../build/host/generated/include -I../include \
-  -o example example.c ../build/host/libpslog.a
+  -o example example.c ../build/host/libpslog.a -pthread
 ./example
 ```
 
@@ -23,7 +23,7 @@ cmake --build --preset package-single-header
 cd examples
 cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
   -I../build/host/generated/include \
-  -o example example.c
+  -o example example.c -pthread
 ./example
 ```
 

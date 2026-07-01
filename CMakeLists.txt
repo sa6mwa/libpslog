@@ -233,6 +233,10 @@ foreach(target pslog_shared pslog_static)
     pslog_enable_coverage_if_requested(${target})
 endforeach()
 
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(pslog_shared PRIVATE -fvisibility=hidden)
+endif()
+
 if(PSLOG_BUILD_TESTS)
     add_library(pslog_test_static STATIC ${PSLOG_SOURCES})
     target_include_directories(pslog_test_static
@@ -260,6 +264,8 @@ set_target_properties(pslog_shared PROPERTIES
     OUTPUT_NAME pslog
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
+    INSTALL_NAME_DIR "@rpath"
+    BUILD_WITH_INSTALL_NAME_DIR ON
 )
 
 set_target_properties(pslog_static PROPERTIES
@@ -268,6 +274,13 @@ set_target_properties(pslog_static PROPERTIES
 
 if(PSLOG_BUILD_TESTS)
     enable_testing()
+    function(pslog_set_test_properties test_name test_labels test_timeout)
+        set_tests_properties(${test_name} PROPERTIES
+            LABELS "${test_labels}"
+            TIMEOUT ${test_timeout}
+        )
+    endfunction()
+
     string(TOUPPER "${CMAKE_BUILD_TYPE}" PSLOG_TEST_BUILD_TYPE_UPPER)
     set(PSLOG_TEST_C_FLAGS "${CMAKE_C_FLAGS}")
     if(DEFINED CMAKE_C_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER})
@@ -276,6 +289,9 @@ if(PSLOG_BUILD_TESTS)
     set(PSLOG_TEST_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
     if(DEFINED CMAKE_EXE_LINKER_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER})
         string(APPEND PSLOG_TEST_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER}}")
+    endif()
+    if(PSLOG_ENABLE_COVERAGE AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        string(APPEND PSLOG_TEST_EXE_LINKER_FLAGS " --coverage")
     endif()
     add_executable(pslog_tests
         tests/test_main.c
@@ -297,6 +313,7 @@ if(PSLOG_BUILD_TESTS)
     target_link_libraries(pslog_tests PRIVATE pslog_test_static jansson)
     pslog_enable_coverage_if_requested(pslog_tests)
     add_test(NAME pslog_tests COMMAND pslog_tests)
+    pslog_set_test_properties(pslog_tests "unit;local" 30)
     add_executable(pslog_single_header_tests
         tests/test_main_single_header.c
         ${PSLOG_BENCH_SUPPORT_SOURCES}
@@ -317,6 +334,7 @@ if(PSLOG_BUILD_TESTS)
     add_dependencies(pslog_single_header_tests package-single-header)
     pslog_enable_coverage_if_requested(pslog_single_header_tests)
     add_test(NAME pslog_single_header_tests COMMAND pslog_single_header_tests)
+    pslog_set_test_properties(pslog_single_header_tests "unit;local;smoke" 30)
     add_test(NAME package_archives_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -331,21 +349,43 @@ if(PSLOG_BUILD_TESTS)
         -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_archives_test.cmake
     )
-    set_tests_properties(package_archives_test PROPERTIES RUN_SERIAL TRUE)
+    set_tests_properties(package_archives_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "packaging;local"
+        TIMEOUT 120
+    )
     add_test(NAME version_resolution_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/version_resolution_test.cmake
     )
-    set_tests_properties(version_resolution_test PROPERTIES RUN_SERIAL TRUE)
+    set_tests_properties(version_resolution_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME release_privacy_gate_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_privacy_gate_test.cmake
     )
-    set_tests_properties(release_privacy_gate_test PROPERTIES RUN_SERIAL TRUE)
+    set_tests_properties(release_privacy_gate_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "packaging;local"
+        TIMEOUT 60
+    )
+    add_test(NAME lua_rockspec_boundary_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_rockspec_boundary_test.cmake
+    )
+    set_tests_properties(lua_rockspec_boundary_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME c_only_configure_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -353,14 +393,47 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/c_only_configure_test.cmake
     )
-    set_tests_properties(c_only_configure_test PROPERTIES RUN_SERIAL TRUE)
+    set_tests_properties(c_only_configure_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 60
+    )
     add_test(NAME clean_script_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/clean_script_test.cmake
     )
-    set_tests_properties(clean_script_test PROPERTIES RUN_SERIAL TRUE)
+    set_tests_properties(clean_script_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME darwin_linker_route_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/darwin_linker_route_test.cmake
+    )
+    set_tests_properties(darwin_linker_route_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME public_symbol_visibility_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DPSLOG_PUBLIC_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/pslog.h
+            -DPSLOG_SHARED_LIB=$<TARGET_FILE:pslog_shared>
+            -DPSLOG_NM=${CMAKE_NM}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/public_symbol_visibility_test.cmake
+    )
+    set_tests_properties(public_symbol_visibility_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME example_integration_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -373,7 +446,14 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/example_integration_test.cmake
     )
-    set_tests_properties(example_integration_test PROPERTIES RUN_SERIAL TRUE)
+    set_tests_properties(example_integration_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "example-smoke;local"
+        TIMEOUT 60
+    )
+    add_custom_target(pslog_ctest_prerequisites
+        DEPENDS pslog_tests pslog_single_header_tests pslog_shared
+    )
 endif()
 
 if(PSLOG_BUILD_BENCHMARKS)
@@ -484,7 +564,7 @@ if(PSLOG_BUILD_TESTS AND PSLOG_ENABLE_COVERAGE AND GCOV_BIN)
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/coverage_report.sh
                 ${CMAKE_CURRENT_BINARY_DIR}
                 ${CMAKE_CURRENT_BINARY_DIR}/coverage-report
-        DEPENDS pslog_tests
+        DEPENDS pslog_ctest_prerequisites
         USES_TERMINAL
         VERBATIM
     )
@@ -538,6 +618,15 @@ add_custom_target(package-single-header
     VERBATIM
 )
 
+add_custom_target(package-source
+    COMMAND ${CMAKE_COMMAND}
+        -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+        -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_source_archive.cmake
+    VERBATIM
+)
+
 add_custom_target(package-checksums
     COMMAND ${CMAKE_COMMAND}
         -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
@@ -552,6 +641,7 @@ add_custom_target(package-privacy-gate
         -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
         -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_release_privacy.cmake
+    DEPENDS package-checksums
     VERBATIM
 )
 

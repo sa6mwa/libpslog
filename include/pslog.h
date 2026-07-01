@@ -9,6 +9,12 @@
 #include "pslog_version.h"
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define PSLOG_API __attribute__((visibility("default")))
+#else
+#define PSLOG_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -128,21 +134,6 @@ typedef struct pslog_bytes {
 } pslog_bytes;
 
 /**
- * Absolute timestamp value used by `pslog_time_field()`.
- *
- * `epoch_seconds` and `nanoseconds` form the wall clock time. The offset is
- * expressed in minutes east of UTC and is used when formatting non-UTC times.
- */
-typedef struct pslog_time_value {
-  /** Whole seconds since the Unix epoch. */
-  long epoch_seconds;
-  /** Additional nanoseconds within the second. */
-  long nanoseconds;
-  /** UTC offset in minutes for local-time rendering. */
-  int utc_offset_minutes;
-} pslog_time_value;
-
-/**
  * Signed 64-bit integer payload type used by `pslog_i64()`.
  *
  * libpslog stores signed integer fields in this type regardless of the
@@ -171,6 +162,21 @@ __extension__ typedef unsigned long long pslog_uint64;
 #else
 typedef unsigned long long pslog_uint64;
 #endif
+
+/**
+ * Absolute timestamp value used by `pslog_time_field()`.
+ *
+ * `epoch_seconds` and `nanoseconds` form the wall clock time. The offset is
+ * expressed in minutes east of UTC and is used when formatting non-UTC times.
+ */
+typedef struct pslog_time_value {
+  /** Whole seconds since the Unix epoch. */
+  long epoch_seconds;
+  /** Additional nanoseconds within the second. */
+  long nanoseconds;
+  /** UTC offset in minutes for local-time rendering. */
+  int utc_offset_minutes;
+} pslog_time_value;
 
 /**
  * Duration value used by `pslog_duration_field()`.
@@ -381,38 +387,38 @@ typedef struct pslog_palette {
  * and through LSP/navigation tooling instead of relying only on string lookup.
  * They are immutable and process-lifetime stable.
  */
-extern const pslog_palette pslog_builtin_palette_default;
-extern const pslog_palette pslog_builtin_palette_outrun_electric;
-extern const pslog_palette pslog_builtin_palette_iosvkem;
-extern const pslog_palette pslog_builtin_palette_gruvbox;
-extern const pslog_palette pslog_builtin_palette_dracula;
-extern const pslog_palette pslog_builtin_palette_nord;
-extern const pslog_palette pslog_builtin_palette_tokyo_night;
-extern const pslog_palette pslog_builtin_palette_solarized_nightfall;
-extern const pslog_palette pslog_builtin_palette_catppuccin_mocha;
-extern const pslog_palette pslog_builtin_palette_gruvbox_light;
-extern const pslog_palette pslog_builtin_palette_monokai_vibrant;
-extern const pslog_palette pslog_builtin_palette_one_dark_aurora;
-extern const pslog_palette pslog_builtin_palette_synthwave_84;
-extern const pslog_palette pslog_builtin_palette_kanagawa;
-extern const pslog_palette pslog_builtin_palette_rose_pine;
-extern const pslog_palette pslog_builtin_palette_rose_pine_dawn;
-extern const pslog_palette pslog_builtin_palette_everforest;
-extern const pslog_palette pslog_builtin_palette_everforest_light;
-extern const pslog_palette pslog_builtin_palette_night_owl;
-extern const pslog_palette pslog_builtin_palette_ayu_mirage;
-extern const pslog_palette pslog_builtin_palette_ayu_light;
-extern const pslog_palette pslog_builtin_palette_one_light;
-extern const pslog_palette pslog_builtin_palette_one_dark;
-extern const pslog_palette pslog_builtin_palette_solarized_light;
-extern const pslog_palette pslog_builtin_palette_solarized_dark;
-extern const pslog_palette pslog_builtin_palette_github_light;
-extern const pslog_palette pslog_builtin_palette_github_dark;
-extern const pslog_palette pslog_builtin_palette_papercolor_light;
-extern const pslog_palette pslog_builtin_palette_papercolor_dark;
-extern const pslog_palette pslog_builtin_palette_oceanic_next;
-extern const pslog_palette pslog_builtin_palette_horizon;
-extern const pslog_palette pslog_builtin_palette_palenight;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_default;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_outrun_electric;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_iosvkem;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_gruvbox;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_dracula;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_nord;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_tokyo_night;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_solarized_nightfall;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_catppuccin_mocha;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_gruvbox_light;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_monokai_vibrant;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_one_dark_aurora;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_synthwave_84;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_kanagawa;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_rose_pine;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_rose_pine_dawn;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_everforest;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_everforest_light;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_night_owl;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_ayu_mirage;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_ayu_light;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_one_light;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_one_dark;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_solarized_light;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_solarized_dark;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_github_light;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_github_dark;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_papercolor_light;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_papercolor_dark;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_oceanic_next;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_horizon;
+PSLOG_API extern const pslog_palette pslog_builtin_palette_palenight;
 
 /**
  * Logger construction options.
@@ -645,7 +651,7 @@ struct pslog_logger {
  *
  * This is the required starting point for building a `pslog_config`.
  */
-void pslog_default_config(pslog_config *config);
+PSLOG_API void pslog_default_config(pslog_config *config);
 
 /**
  * Creates a new logger from `config`.
@@ -653,7 +659,7 @@ void pslog_default_config(pslog_config *config);
  * Returns NULL when allocation fails or when the configured output cannot be
  * initialized.
  */
-pslog_logger *pslog_new(const pslog_config *config);
+PSLOG_API pslog_logger *pslog_new(const pslog_config *config);
 
 /**
  * Creates a new logger from environment overrides layered on top of `config`.
@@ -662,8 +668,8 @@ pslog_logger *pslog_new(const pslog_config *config);
  * copied first, then environment variables override selected members. This is
  * the C equivalent of "logger from env" setup in the Go implementation.
  */
-pslog_logger *pslog_new_from_env(const char *prefix,
-                                 const pslog_config *config);
+PSLOG_API pslog_logger *pslog_new_from_env(const char *prefix,
+                                           const pslog_config *config);
 
 /**
  * Builds a `pslog_output` from a `FILE *`.
@@ -671,7 +677,7 @@ pslog_logger *pslog_new_from_env(const char *prefix,
  * When `close_on_destroy` is non-zero, destroying the logger also closes `fp`.
  * When zero, `fp` remains owned by the caller.
  */
-pslog_output pslog_output_from_fp(FILE *fp, int close_on_destroy);
+PSLOG_API pslog_output pslog_output_from_fp(FILE *fp, int close_on_destroy);
 
 /**
  * Initializes `output` to append to a file path.
@@ -681,8 +687,8 @@ pslog_output pslog_output_from_fp(FILE *fp, int close_on_destroy);
  *
  * Returns `0` on success.
  */
-int pslog_output_init_file(pslog_output *output, const char *path,
-                           const char *mode);
+PSLOG_API int pslog_output_init_file(pslog_output *output, const char *path,
+                                     const char *mode);
 
 /**
  * Destroys a standalone output object previously initialized by libpslog.
@@ -690,22 +696,26 @@ int pslog_output_init_file(pslog_output *output, const char *path,
  * This is mainly useful when an output is constructed before logger creation
  * and later discarded without being transferred into a logger.
  */
-void pslog_output_destroy(pslog_output *output);
+PSLOG_API void pslog_output_destroy(pslog_output *output);
 
 /**
  * Wraps `target` so failures can be observed while preserving normal writes.
  *
- * The resulting wrapper is written into `observed->output`.
+ * The resulting wrapper is written into `observed->output`. When
+ * `target->owned` is non-zero, ownership transfers to the wrapper output and
+ * the original `pslog_output` must be treated as moved-from for ownership
+ * purposes: do not destroy, close, or transfer it again unless you first clear
+ * or override the copied ownership state yourself.
  */
-void pslog_observed_output_init(pslog_observed_output *observed,
-                                const pslog_output *target,
-                                pslog_write_failure_fn on_failure,
-                                void *failure_userdata);
+PSLOG_API void pslog_observed_output_init(pslog_observed_output *observed,
+                                          const pslog_output *target,
+                                          pslog_write_failure_fn on_failure,
+                                          void *failure_userdata);
 
 /**
  * Returns cumulative failure statistics from an observed output wrapper.
  */
-pslog_observed_output_stats
+PSLOG_API pslog_observed_output_stats
 pslog_observed_output_stats_get(const pslog_observed_output *observed);
 
 /**
@@ -715,12 +725,12 @@ pslog_observed_output_stats_get(const pslog_observed_output *observed);
  * no-op that returns `0`, which makes it suitable for straightforward cleanup
  * paths where the logger may be optional.
  */
-int pslog_close(pslog_logger *log);
+PSLOG_API int pslog_close(pslog_logger *log);
 
 /**
  * Returns the canonical lowercase string for `level`.
  */
-const char *pslog_level_string(pslog_level level);
+PSLOG_API const char *pslog_level_string(pslog_level level);
 
 /**
  * Parses a level name such as `"debug"` or `"warn"`.
@@ -728,7 +738,7 @@ const char *pslog_level_string(pslog_level level);
  * Leading and trailing ASCII whitespace is ignored. Returns non-zero on
  * success.
  */
-int pslog_parse_level(const char *text, pslog_level *level);
+PSLOG_API int pslog_parse_level(const char *text, pslog_level *level);
 
 /**
  * Returns non-zero when `text` satisfies libpslog's trusted-string contract.
@@ -737,12 +747,12 @@ int pslog_parse_level(const char *text, pslog_level *level);
  * path. Use this only when you want to explicitly reason about trust decisions;
  * most callers should just use `pslog_str()` or `pslog_trusted_str()`.
  */
-int pslog_string_is_trusted(const char *text);
+PSLOG_API int pslog_string_is_trusted(const char *text);
 
 /**
  * Returns the built-in default ANSI palette.
  */
-const pslog_palette *pslog_palette_default(void);
+PSLOG_API const pslog_palette *pslog_palette_default(void);
 
 /**
  * Looks up a built-in palette by canonical name or supported alias.
@@ -750,23 +760,23 @@ const pslog_palette *pslog_palette_default(void);
  * Unknown names fall back to the built-in default palette. Passing NULL or an
  * empty string also returns the default palette.
  */
-const pslog_palette *pslog_palette_by_name(const char *name);
+PSLOG_API const pslog_palette *pslog_palette_by_name(const char *name);
 
 /**
  * Returns the number of built-in palettes available through the palette lookup
  * APIs.
  */
-size_t pslog_palette_count(void);
+PSLOG_API size_t pslog_palette_count(void);
 
 /**
  * Returns the canonical name of the palette at `index`.
  *
  * The returned pointer remains valid for the lifetime of the process.
  */
-const char *pslog_palette_name(size_t index);
+PSLOG_API const char *pslog_palette_name(size_t index);
 
 /** Builds a field that renders as a null value. */
-pslog_field pslog_null(const char *key);
+PSLOG_API pslog_field pslog_null(const char *key);
 
 /**
  * Builds a string field.
@@ -774,7 +784,7 @@ pslog_field pslog_null(const char *key);
  * libpslog automatically caches key/value lengths and trust metadata so the
  * field can be reused efficiently.
  */
-pslog_field pslog_str(const char *key, const char *value);
+PSLOG_API pslog_field pslog_str(const char *key, const char *value);
 /**
  * Creates a field that renders an errno-style integer code as error text.
  *
@@ -784,7 +794,7 @@ pslog_field pslog_str(const char *key, const char *value);
  * The stored integer is resolved to text inside libpslog and rendered with
  * error coloring rather than normal string coloring.
  */
-pslog_field pslog_errno(const char *key, int err);
+PSLOG_API pslog_field pslog_errno(const char *key, int err);
 
 /**
  * Builds a string field that explicitly opts into the trusted-string fast path.
@@ -792,25 +802,26 @@ pslog_field pslog_errno(const char *key, int err);
  * Trust is applied only when the provided key and value satisfy the trusted
  * string rules. Unsafe inputs still fall back to normal escaping.
  */
-pslog_field pslog_trusted_str(const char *key, const char *value);
+PSLOG_API pslog_field pslog_trusted_str(const char *key, const char *value);
 
 /** Builds a signed integer field rendered numerically. */
-pslog_field pslog_i64(const char *key, pslog_int64 value);
+PSLOG_API pslog_field pslog_i64(const char *key, pslog_int64 value);
 /** Builds an unsigned integer field rendered numerically. */
-pslog_field pslog_u64(const char *key, pslog_uint64 value);
+PSLOG_API pslog_field pslog_u64(const char *key, pslog_uint64 value);
 /** Builds a floating-point field using libpslog's configured float policy. */
-pslog_field pslog_f64(const char *key, double value);
+PSLOG_API pslog_field pslog_f64(const char *key, double value);
 /** Builds a boolean field. Zero is false, non-zero is true. */
-pslog_field pslog_bool(const char *key, int value);
+PSLOG_API pslog_field pslog_bool(const char *key, int value);
 /** Builds a pointer field rendered in pointer notation. */
-pslog_field pslog_ptr(const char *key, const void *value);
+PSLOG_API pslog_field pslog_ptr(const char *key, const void *value);
 
 /**
  * Builds a bytes field.
  *
  * The data is borrowed, not copied. The bytes are rendered as a hex string.
  */
-pslog_field pslog_bytes_field(const char *key, const void *data, size_t len);
+PSLOG_API pslog_field pslog_bytes_field(const char *key, const void *data,
+                                        size_t len);
 
 /**
  * Builds a wall-clock timestamp field.
@@ -818,14 +829,15 @@ pslog_field pslog_bytes_field(const char *key, const void *data, size_t len);
  * The offset is expressed in minutes east of UTC and is used when formatting
  * non-UTC output.
  */
-pslog_field pslog_time_field(const char *key, long epoch_seconds,
-                             long nanoseconds, int utc_offset_minutes);
+PSLOG_API pslog_field pslog_time_field(const char *key, long epoch_seconds,
+                                       long nanoseconds,
+                                       int utc_offset_minutes);
 
 /**
  * Builds a duration field rendered in pslog's human-readable duration style.
  */
-pslog_field pslog_duration_field(const char *key, long seconds,
-                                 long nanoseconds);
+PSLOG_API pslog_field pslog_duration_field(const char *key, long seconds,
+                                           long nanoseconds);
 
 /**
  * Emits a structured event through the generic level-aware logging entry
@@ -835,42 +847,43 @@ pslog_field pslog_duration_field(const char *key, long seconds,
  * `log` is a no-op, which makes this convenient in call sites where the logger
  * may be optional.
  */
-void pslog_fields(pslog_logger *log, pslog_level level, const char *msg,
-                  const pslog_field *fields, size_t count);
+PSLOG_API void pslog_fields(pslog_logger *log, pslog_level level,
+                            const char *msg, const pslog_field *fields,
+                            size_t count);
 
 /** Emits a trace event through the free-function API; NULL logger is a no-op.
  */
-void pslog_trace(pslog_logger *log, const char *msg, const pslog_field *fields,
-                 size_t count);
+PSLOG_API void pslog_trace(pslog_logger *log, const char *msg,
+                           const pslog_field *fields, size_t count);
 /** Emits a debug event through the free-function API; NULL logger is a no-op.
  */
-void pslog_debug(pslog_logger *log, const char *msg, const pslog_field *fields,
-                 size_t count);
+PSLOG_API void pslog_debug(pslog_logger *log, const char *msg,
+                           const pslog_field *fields, size_t count);
 /** Emits an info event through the free-function API; NULL logger is a no-op.
  */
-void pslog_info(pslog_logger *log, const char *msg, const pslog_field *fields,
-                size_t count);
+PSLOG_API void pslog_info(pslog_logger *log, const char *msg,
+                          const pslog_field *fields, size_t count);
 /** Emits a warn event through the free-function API; NULL logger is a no-op. */
-void pslog_warn(pslog_logger *log, const char *msg, const pslog_field *fields,
-                size_t count);
+PSLOG_API void pslog_warn(pslog_logger *log, const char *msg,
+                          const pslog_field *fields, size_t count);
 /** Emits an error event through the free-function API; NULL logger is a no-op.
  */
-void pslog_error(pslog_logger *log, const char *msg, const pslog_field *fields,
-                 size_t count);
+PSLOG_API void pslog_error(pslog_logger *log, const char *msg,
+                           const pslog_field *fields, size_t count);
 /**
  * Emits a fatal event through the free-function API.
  *
  * NULL logger is a no-op. Otherwise this logs and exits with status 1.
  */
-void pslog_fatal(pslog_logger *log, const char *msg, const pslog_field *fields,
-                 size_t count);
+PSLOG_API void pslog_fatal(pslog_logger *log, const char *msg,
+                           const pslog_field *fields, size_t count);
 /**
  * Emits a panic event through the free-function API.
  *
  * NULL logger is a no-op. Otherwise this logs and aborts the process.
  */
-void pslog_panic(pslog_logger *log, const char *msg, const pslog_field *fields,
-                 size_t count);
+PSLOG_API void pslog_panic(pslog_logger *log, const char *msg,
+                           const pslog_field *fields, size_t count);
 
 /**
  * Emits a structured event using the `kvfmt` variadic path.
@@ -879,31 +892,38 @@ void pslog_panic(pslog_logger *log, const char *msg, const pslog_field *fields,
  * `pslog_logger.logf` for the `kvfmt` contract. Passing NULL for `log` is a
  * no-op.
  */
-void pslog(pslog_logger *log, pslog_level level, const char *msg,
-           const char *kvfmt, ...);
+PSLOG_API void pslog(pslog_logger *log, pslog_level level, const char *msg,
+                     const char *kvfmt, ...);
 
 /** Emits a trace event through the `kvfmt` free-function path. */
-void pslog_tracef(pslog_logger *log, const char *msg, const char *kvfmt, ...);
+PSLOG_API void pslog_tracef(pslog_logger *log, const char *msg,
+                            const char *kvfmt, ...);
 /** Emits a debug event through the `kvfmt` free-function path. */
-void pslog_debugf(pslog_logger *log, const char *msg, const char *kvfmt, ...);
+PSLOG_API void pslog_debugf(pslog_logger *log, const char *msg,
+                            const char *kvfmt, ...);
 /** Emits an info event through the `kvfmt` free-function path. */
-void pslog_infof(pslog_logger *log, const char *msg, const char *kvfmt, ...);
+PSLOG_API void pslog_infof(pslog_logger *log, const char *msg,
+                           const char *kvfmt, ...);
 /** Emits a warn event through the `kvfmt` free-function path. */
-void pslog_warnf(pslog_logger *log, const char *msg, const char *kvfmt, ...);
+PSLOG_API void pslog_warnf(pslog_logger *log, const char *msg,
+                           const char *kvfmt, ...);
 /** Emits an error event through the `kvfmt` free-function path. */
-void pslog_errorf(pslog_logger *log, const char *msg, const char *kvfmt, ...);
+PSLOG_API void pslog_errorf(pslog_logger *log, const char *msg,
+                            const char *kvfmt, ...);
 /**
  * Emits a fatal event through the `kvfmt` free-function path.
  *
  * NULL logger is a no-op. Otherwise this logs and exits with status 1.
  */
-void pslog_fatalf(pslog_logger *log, const char *msg, const char *kvfmt, ...);
+PSLOG_API void pslog_fatalf(pslog_logger *log, const char *msg,
+                            const char *kvfmt, ...);
 /**
  * Emits a panic event through the `kvfmt` free-function path.
  *
  * NULL logger is a no-op. Otherwise this logs and aborts the process.
  */
-void pslog_panicf(pslog_logger *log, const char *msg, const char *kvfmt, ...);
+PSLOG_API void pslog_panicf(pslog_logger *log, const char *msg,
+                            const char *kvfmt, ...);
 
 /**
  * Derives a child logger with additional static fields.
@@ -918,8 +938,8 @@ void pslog_panicf(pslog_logger *log, const char *msg, const char *kvfmt, ...);
  *
  * Returns NULL when `log` is NULL or when allocation fails.
  */
-pslog_logger *pslog_with(pslog_logger *log, const pslog_field *fields,
-                         size_t count);
+PSLOG_API pslog_logger *pslog_with(pslog_logger *log, const pslog_field *fields,
+                                   size_t count);
 
 /**
  * Derives a child logger with additional static fields described by `kvfmt`.
@@ -941,14 +961,14 @@ pslog_logger *pslog_with(pslog_logger *log, const pslog_field *fields,
  * Passing `NULL` for `kvfmt` clones the logger without adding fields. Returns
  * NULL when `log` is NULL, when `kvfmt` is invalid, or when allocation fails.
  */
-pslog_logger *pslog_withf(pslog_logger *log, const char *kvfmt, ...);
+PSLOG_API pslog_logger *pslog_withf(pslog_logger *log, const char *kvfmt, ...);
 
 /**
  * Derives a child logger with a different minimum enabled level.
  *
  * This does not mutate the original logger. Returns NULL when `log` is NULL.
  */
-pslog_logger *pslog_with_level(pslog_logger *log, pslog_level level);
+PSLOG_API pslog_logger *pslog_with_level(pslog_logger *log, pslog_level level);
 
 /**
  * Derives a child logger that adds the effective level as a static field.
@@ -956,7 +976,7 @@ pslog_logger *pslog_with_level(pslog_logger *log, pslog_level level);
  * This is useful when downstream consumers want the level duplicated into the
  * structured field set. Returns NULL when `log` is NULL.
  */
-pslog_logger *pslog_with_level_field(pslog_logger *log);
+PSLOG_API pslog_logger *pslog_with_level_field(pslog_logger *log);
 
 #ifdef __cplusplus
 }

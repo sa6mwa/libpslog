@@ -15,7 +15,13 @@ if(NOT PSLOG_VERSION_OVERRIDE STREQUAL "")
     set(_pslog_resolved_version "${PSLOG_VERSION_OVERRIDE}")
 else()
     find_program(PSLOG_GIT_EXECUTABLE NAMES git)
-    if(PSLOG_GIT_EXECUTABLE)
+    set(_pslog_git_describe_result 1)
+    if(EXISTS "${_pslog_version_source_dir}/.git")
+        set(_pslog_source_has_git_metadata TRUE)
+    else()
+        set(_pslog_source_has_git_metadata FALSE)
+    endif()
+    if(PSLOG_GIT_EXECUTABLE AND _pslog_source_has_git_metadata)
         execute_process(
             COMMAND "${PSLOG_GIT_EXECUTABLE}" -C "${_pslog_version_source_dir}" describe --tags --exact-match HEAD
             RESULT_VARIABLE _pslog_git_describe_result
@@ -28,9 +34,18 @@ else()
             set(_pslog_resolved_version "${CMAKE_MATCH_1}")
         endif()
     endif()
+    if(NOT _pslog_git_describe_result EQUAL 0
+       AND NOT _pslog_source_has_git_metadata
+       AND EXISTS "${_pslog_version_source_dir}/VERSION")
+        file(READ "${_pslog_version_source_dir}/VERSION" _pslog_version_file)
+        string(STRIP "${_pslog_version_file}" _pslog_version_file)
+        if(_pslog_version_file MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?)$")
+            set(_pslog_resolved_version "${_pslog_version_file}")
+        endif()
+    endif()
 endif()
 
-if(NOT _pslog_resolved_version MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?$")
+if(NOT _pslog_resolved_version MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$")
     message(FATAL_ERROR
         "invalid libpslog version '${_pslog_resolved_version}'; expected X.Y.Z with optional prerelease metadata")
 endif()

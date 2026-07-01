@@ -53,8 +53,18 @@ local function copy_table(input)
 end
 
 local function copy_exports()
+  local public_core_exports = {
+    MODE_CONSOLE = true,
+    MODE_JSON = true,
+    available_palettes = true,
+    level_string = true,
+    parse_level = true,
+    version = true,
+  }
   for key, value in pairs(core) do
-    M[key] = value
+    if public_core_exports[key] then
+      M[key] = value
+    end
   end
 end
 

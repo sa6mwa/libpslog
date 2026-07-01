@@ -38,7 +38,8 @@ typedef pthread_mutex_t pslog_mutex;
       if (_pslog_buffer->len == _pslog_buffer->capacity) {                     \
         pslog_buffer_flush(_pslog_buffer);                                     \
       }                                                                        \
-      if (_pslog_buffer->data != NULL && _pslog_buffer->capacity != 0u) {      \
+      if (_pslog_buffer->data != NULL &&                                       \
+          _pslog_buffer->len < _pslog_buffer->capacity) {                      \
         _pslog_buffer->data[_pslog_buffer->len] = (ch);                        \
         ++_pslog_buffer->len;                                                  \
         _pslog_buffer->data[_pslog_buffer->len] = '\0';                        \
@@ -156,6 +157,7 @@ typedef struct pslog_console_prefix_cache_entry {
   pslog_field_type type;
   size_t prefix_len;
   char prefix[PSLOG_CONSOLE_PREFIX_INLINE_CAPACITY];
+  char key_copy[PSLOG_CONSOLE_PREFIX_INLINE_CAPACITY];
 } pslog_console_prefix_cache_entry;
 
 typedef struct pslog_double_cache_entry {
@@ -240,6 +242,8 @@ void pslog_buffer_append_char(pslog_buffer *buffer, char ch);
 void pslog_buffer_append_cstr(pslog_buffer *buffer, const char *text);
 void pslog_buffer_append_n(pslog_buffer *buffer, const char *text, size_t len);
 void pslog_buffer_append_json_string(pslog_buffer *buffer, const char *text);
+void pslog_buffer_append_json_string_n(pslog_buffer *buffer, const char *text,
+                                       size_t len);
 void pslog_buffer_append_json_string_maybe_trusted(pslog_buffer *buffer,
                                                    const char *text);
 void pslog_buffer_append_json_trusted_string(pslog_buffer *buffer,
@@ -253,6 +257,8 @@ void pslog_buffer_append_bytes_hex(pslog_buffer *buffer,
                                    const unsigned char *data, size_t len);
 void pslog_buffer_append_signed(pslog_buffer *buffer, pslog_int64 value);
 void pslog_buffer_append_unsigned(pslog_buffer *buffer, pslog_uint64 value);
+void pslog_normalize_decimal_separator(char *text, size_t len);
+int pslog_format_double_ascii(char *dst, size_t dst_size, double value);
 void pslog_buffer_append_double(pslog_buffer *buffer, double value);
 void pslog_buffer_append_pointer(pslog_buffer *buffer, const void *value);
 void pslog_buffer_append_time(pslog_buffer *buffer, pslog_time_value value,
@@ -262,6 +268,8 @@ void pslog_buffer_append_duration(pslog_buffer *buffer,
 void pslog_buffer_finish_line(pslog_buffer *buffer);
 void pslog_buffer_flush(pslog_buffer *buffer);
 int pslog_buffer_reserve(pslog_buffer *buffer, size_t min_capacity);
+void pslog_buffer_lock_output(pslog_buffer *buffer);
+void pslog_buffer_unlock_output(pslog_buffer *buffer);
 
 void *pslog_malloc_internal(size_t size);
 void *pslog_calloc_internal(size_t count, size_t size);
@@ -321,6 +329,9 @@ void pslog_vlogf_impl(pslog_logger *log, pslog_level level, const char *msg,
 #if defined(PSLOG_TEST_HOOKS)
 void pslog_test_allocator_reset(void);
 void pslog_test_allocator_get(pslog_test_allocator_stats *stats);
+void pslog_test_allocator_fail_after(unsigned long calls);
+int pslog_test_console_prefix_cacheable(pslog_shared_state *shared,
+                                        const pslog_field *field);
 #endif
 
 #endif

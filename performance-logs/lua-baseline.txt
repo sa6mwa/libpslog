@@ -1,0 +1,22 @@
+# pslog_perf_artifact: lua-baseline
+# provenance: initial checked-in Lua binding baseline for perf-gate
+# measured_commit: hardening/audit-reviews working tree before this artifact commit
+# date: 2026-06-30
+# os_kernel: Linux
+# cpu_model: 13th Gen Intel(R) Core(TM) i7-1355U
+# cmake_options: host preset, PSLOG_BENCHMARK_WITH_LIBLOGGER=OFF, PSLOG_BENCHMARK_WITH_QUILL=OFF
+# benchmark: gobencher embedded Lua 5.5 benchmark rows
+# command: cd gobencher && GOCACHE="$(mktemp -d)" go test ./benchmark -run '^$' -bench 'Benchmark(ProductionCompare|FixedCompare|LuaTableForm)' -benchmem -benchtime=200ms -count=1
+# cmake_preset: host
+# optional_deps: liblogger off, quill off
+# host: local
+# compiler: GNU
+# artifact_role: current checked-in Lua comparison baseline
+# iterations: Go benchmark selected
+# run_count: 1
+# pinning: none
+
+BenchmarkProductionCompare/jsonLua-12                    	  622891	       387.3 ns/op	       171.9 bytes/op	       383.0 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonLua-12                         	  828928	       276.3 ns/op	       125.1 bytes/op	       273.4 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkLuaTableForm/Production-12                      	  457983	       515.2 ns/op	       171.9 bytes/op	       512.8 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkLuaTableForm/Fixed-12                           	  700195	       337.3 ns/op	       125.1 bytes/op	       335.5 c_ns/op	       0 B/op	       0 allocs/op

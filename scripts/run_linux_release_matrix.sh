@@ -82,8 +82,9 @@ else
 fi
 
 cmake --build --preset package-single-header
+cmake --build --preset package-source
 make release-lua-artifacts
-cmake --build --preset package-privacy-gate
 cmake --build --preset package-checksums
+cmake --build --preset package-privacy-gate
 
 printf '\nRelease matrix completed successfully.\n'

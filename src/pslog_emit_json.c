@@ -103,7 +103,8 @@ static void pslog_append_json_value_plain(pslog_shared_state *shared,
       PSLOG_BUFFER_APPEND_JSON_TRUSTED_STRING_N_FAST(
           buffer, field->as.string_value, field->value_len);
     } else {
-      pslog_buffer_append_json_string(buffer, field->as.string_value);
+      pslog_buffer_append_json_string_n(buffer, field->as.string_value,
+                                        field->value_len);
     }
     break;
   case PSLOG_FIELD_SIGNED:
@@ -187,8 +188,8 @@ static void pslog_append_json_value_color(pslog_shared_state *shared,
       PSLOG_BUFFER_APPEND_JSON_TRUSTED_STRING_N_FAST(
           buffer, field->as.string_value, field->value_len);
     } else {
-      pslog_buffer_append_json_string_maybe_trusted(buffer,
-                                                    field->as.string_value);
+      pslog_buffer_append_json_string_n(buffer, field->as.string_value,
+                                        field->value_len);
     }
     PSLOG_BUFFER_APPEND_N_FAST(buffer, palette->reset,
                                shared->palette_reset_len);
