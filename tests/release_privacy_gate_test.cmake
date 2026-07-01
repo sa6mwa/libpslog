@@ -15,6 +15,9 @@ set(manifest_dist "${test_root}/dist")
 set(manifest_artifact "${manifest_dist}/manifest-clean.rockspec")
 set(manifest_file "${manifest_dist}/libpslog-9.9.9-CHECKSUMS")
 set(manifest_stale_artifact "${manifest_dist}/libpslog-1.2.3-x86_64-linux-gnu.tar.gz")
+set(manifest_uncompressed_header "${manifest_dist}/pslog-9.9.9.h")
+set(manifest_darwin_smoke_zip
+    "${manifest_dist}/libpslog-9.9.9-arm64-apple-darwin-smoke-test.zip")
 set(missing_manifest_root "${test_root}/missing-manifest-root")
 set(missing_manifest_archive "${test_root}/missing-manifest.tar.gz")
 
@@ -172,6 +175,52 @@ if(NOT "${stale_manifest_output}${stale_manifest_error}" MATCHES "not listed in 
         "stderr:\n${stale_manifest_error}")
 endif()
 file(REMOVE "${manifest_stale_artifact}")
+
+file(WRITE "${manifest_uncompressed_header}" "uncompressed single-header artifact\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -DPSLOG_ROOT=${PSLOG_ROOT}
+        -DPSLOG_BINARY_DIR=${PSLOG_BINARY_DIR}
+        -DPSLOG_VERSION=9.9.9
+        -DPSLOG_DIST_DIR=${manifest_dist}
+        -P ${PSLOG_ROOT}/cmake/check_release_privacy.cmake
+    RESULT_VARIABLE uncompressed_header_result
+    OUTPUT_VARIABLE uncompressed_header_output
+    ERROR_VARIABLE uncompressed_header_error
+)
+if(uncompressed_header_result EQUAL 0)
+    message(FATAL_ERROR "release privacy gate accepted an unlisted uncompressed single-header artifact")
+endif()
+if(NOT "${uncompressed_header_output}${uncompressed_header_error}" MATCHES "not listed in checksum manifest")
+    message(FATAL_ERROR
+        "release privacy gate failure did not explain uncompressed header rejection\n"
+        "stdout:\n${uncompressed_header_output}\n"
+        "stderr:\n${uncompressed_header_error}")
+endif()
+file(REMOVE "${manifest_uncompressed_header}")
+
+file(WRITE "${manifest_darwin_smoke_zip}" "darwin smoke fixture\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -DPSLOG_ROOT=${PSLOG_ROOT}
+        -DPSLOG_BINARY_DIR=${PSLOG_BINARY_DIR}
+        -DPSLOG_VERSION=9.9.9
+        -DPSLOG_DIST_DIR=${manifest_dist}
+        -P ${PSLOG_ROOT}/cmake/check_release_privacy.cmake
+    RESULT_VARIABLE darwin_smoke_result
+    OUTPUT_VARIABLE darwin_smoke_output
+    ERROR_VARIABLE darwin_smoke_error
+)
+if(darwin_smoke_result EQUAL 0)
+    message(FATAL_ERROR "release privacy gate accepted an unlisted Darwin smoke zip")
+endif()
+if(NOT "${darwin_smoke_output}${darwin_smoke_error}" MATCHES "not listed in checksum manifest")
+    message(FATAL_ERROR
+        "release privacy gate failure did not explain Darwin smoke zip rejection\n"
+        "stdout:\n${darwin_smoke_output}\n"
+        "stderr:\n${darwin_smoke_error}")
+endif()
+file(REMOVE "${manifest_darwin_smoke_zip}")
 
 file(WRITE "${fake_dylib}" "fake Mach-O dylib fixture\n")
 file(WRITE "${fake_otool}" [=[

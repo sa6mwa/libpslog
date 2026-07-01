@@ -131,3 +131,5 @@ execute_process(
 if(NOT gzip_result EQUAL 0)
     message(FATAL_ERROR "failed to gzip single-header artifact")
 endif()
+
+file(REMOVE "${PSLOG_SINGLE_HEADER_DIST}")

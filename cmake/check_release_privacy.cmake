@@ -50,24 +50,15 @@ else()
         list(APPEND checksum_entries "${checksum_path}")
     endforeach()
 
-    file(GLOB release_looking_paths
-        "${dist_dir}/libpslog-*.tar.gz"
-        "${dist_dir}/libpslog-*-CHECKSUMS"
-        "${dist_dir}/lua-pslog-*.tar.gz"
-        "${dist_dir}/lua-pslog-*.rockspec"
-        "${dist_dir}/lua-pslog-*.src.rock"
-        "${dist_dir}/pslog-*.h"
-        "${dist_dir}/pslog-*.h.gz"
-    )
-    foreach(release_path IN LISTS release_looking_paths)
-        get_filename_component(release_name "${release_path}" NAME)
-        if(release_name STREQUAL "pslog-${PSLOG_VERSION}.h")
+    file(GLOB dist_paths "${dist_dir}/*")
+    foreach(release_path IN LISTS dist_paths)
+        if(IS_DIRECTORY "${release_path}")
             continue()
         endif()
         list(FIND checksum_entries "${release_path}" checksum_index)
         if(checksum_index EQUAL -1)
             message(FATAL_ERROR
-                "release-looking artifact is not listed in checksum manifest: ${release_path}")
+                "dist file is not listed in checksum manifest: ${release_path}")
         endif()
     endforeach()
 endif()

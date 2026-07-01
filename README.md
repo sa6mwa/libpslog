@@ -188,10 +188,12 @@ cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
 ./example
 ```
 
-The shipped single-header artifacts are written to `dist/pslog-<version>.h`
-and `dist/pslog-<version>.h.gz`. The generated header contains the public API,
-the `PSLOG_IMPLEMENTATION` section, the embedded license text, and the
-single-header usage notes at the top of the file.
+The release single-header artifact is written to `dist/pslog-<version>.h.gz`.
+The uncompressed generated header remains in the build tree at
+`build/host/generated/include/pslog_single_header.h` for local compile smoke
+tests. The generated header contains the public API, the `PSLOG_IMPLEMENTATION`
+section, the embedded license text, and the single-header usage notes at the top
+of the file.
 
 ## Lua Binding
 
