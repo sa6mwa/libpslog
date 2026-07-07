@@ -88,6 +88,10 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, unsigned long size) {
 endfunction()
 
 find_program(CLANG_FORMAT_BIN NAMES clang-format)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(PSLOG_LUA QUIET lua5.5)
+endif()
 
 file(GLOB_RECURSE PSLOG_FORMAT_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
@@ -314,6 +318,37 @@ if(PSLOG_BUILD_TESTS)
     pslog_enable_coverage_if_requested(pslog_tests)
     add_test(NAME pslog_tests COMMAND pslog_tests)
     pslog_set_test_properties(pslog_tests "unit;local" 30)
+    if(PSLOG_LUA_FOUND)
+        add_executable(pslog_lua_interop_tests
+            tests/lua_interop_embedder_test.c
+            lua/src/pslog_lua.c
+        )
+        target_include_directories(pslog_lua_interop_tests PRIVATE
+            ${PSLOG_GENERATED_INCLUDE_DIR}
+            include
+            ${PSLOG_LUA_INCLUDE_DIRS}
+        )
+        target_compile_definitions(pslog_lua_interop_tests PRIVATE
+            PSLOG_VERSION_STRING="${PSLOG_RESOLVED_VERSION}"
+            _POSIX_C_SOURCE=200809L
+        )
+        target_compile_options(pslog_lua_interop_tests PRIVATE
+            ${PSLOG_LUA_CFLAGS_OTHER}
+        )
+        target_link_directories(pslog_lua_interop_tests PRIVATE
+            ${PSLOG_LUA_LIBRARY_DIRS}
+        )
+        target_link_libraries(pslog_lua_interop_tests PRIVATE
+            pslog_test_static
+            ${PSLOG_LUA_LIBRARIES}
+        )
+        pslog_enable_coverage_if_requested(pslog_lua_interop_tests)
+        add_test(NAME pslog_lua_interop_tests COMMAND pslog_lua_interop_tests)
+        pslog_set_test_properties(pslog_lua_interop_tests "unit;local;lua" 30)
+        set_tests_properties(pslog_lua_interop_tests PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+    endif()
     add_executable(pslog_single_header_tests
         tests/test_main_single_header.c
         ${PSLOG_BENCH_SUPPORT_SOURCES}
@@ -570,7 +605,11 @@ if(PSLOG_BUILD_TESTS AND PSLOG_ENABLE_COVERAGE AND GCOV_BIN)
     )
 endif()
 
-install(FILES include/pslog.h "${PSLOG_GENERATED_VERSION_HEADER}" DESTINATION include)
+install(FILES
+    include/pslog.h
+    "${PSLOG_GENERATED_VERSION_HEADER}"
+    DESTINATION include
+)
 install(TARGETS pslog_shared
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin

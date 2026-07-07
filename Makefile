@@ -47,6 +47,7 @@ LUA_ROCK_SOURCES := \
 	lua/scripts/release_version.sh \
 	lua/pslog/init.lua \
 	lua/src/pslog_lua.c \
+	include/pslog_lua.h \
 	include/pslog.h
 GO_PRODUCTION_DATASET := gobencher/benchmark/production_data_generated.go
 GO_PRODUCTION_DATASET_SOURCE := bench/bench_production_dataset.c
@@ -297,9 +298,9 @@ finalize-slice: format build-host
 	cmake --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(pslog_tests|pslog_single_header_tests|example_integration_test|public_symbol_visibility_test|darwin_linker_route_test)$$' --output-on-failure
 
-prerelease: finalize-slice asan lua-test fuzz-smoke package-verify
+prerelease: format test asan lua-test fuzz-smoke package-verify
 
-prerelease-hardening: prerelease release-matrix
+prerelease-hardening: prerelease gobencher-tests perf-gate fuzz release-matrix
 
 print-release-version:
 	@./lua/scripts/release_version.sh
@@ -360,6 +361,7 @@ $(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) build-host
 
 lua-test: lua-rock
 	LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}" ./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
+	./lua/scripts/run_interop_embedder_test.sh "$(LUA_LOCAL_LIBDIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)"
 	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && lua lua/tests/test_pslog.lua
 
 $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATASET_TOOL) $(GO_PRODUCTION_DATASET_SOURCE)

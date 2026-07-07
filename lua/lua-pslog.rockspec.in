@@ -28,6 +28,11 @@ build = {
     CFLAGS = "$(CFLAGS) -std=c99 -pthread",
     LDFLAGS = "$(LDFLAGS) -pthread",
   },
+  install = {
+    lua = {
+      "include/pslog_lua.h",
+    },
+  },
   modules = {
     ["pslog.core"] = {
       sources = {
@@ -39,6 +44,13 @@ build = {
         "PSLOG_VERSION_PATCH=@PSLOG_VERSION_PATCH@",
         "PSLOG_VERSION_STRING=\"@VERSION@\"",
         "_POSIX_C_SOURCE=200809L",
+      },
+      incdirs = {
+        "include",
+        "$(LIBPSLOG_INCDIR)",
+      },
+      libdirs = {
+        "$(LIBPSLOG_LIBDIR)",
       },
       libraries = {
         "pslog",

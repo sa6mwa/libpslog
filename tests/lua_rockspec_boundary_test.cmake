@@ -28,6 +28,9 @@ foreach(required_fragment
         "LIBPSLOG"
         "header = \"pslog.h\""
         "library = \"pslog\""
+        "install"
+        "pslog_lua.h"
+        "\"include\""
         "\"lua/src/pslog_lua.c\"")
     if(NOT content MATCHES "${required_fragment}")
         message(FATAL_ERROR "Lua rockspec missing required public libpslog linkage fragment: ${required_fragment}")

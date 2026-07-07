@@ -377,6 +377,29 @@ The module also exposes a small set of helpers:
 - `pslog.available_palettes()` returns the built-in palette names
 - `pslog.version()` returns the bound `libpslog` version string
 
+## C Embedder Interop
+
+The rock also installs `pslog_lua.h` for C embedders that already host Lua and
+need to share `pslog.logger` userdata with other native modules loaded in the
+same process.
+
+The interop helpers are exported by `pslog.core`, not by the standalone
+`libpslog` shared library. Native modules that use this surface should include
+`pslog_lua.h`, load or link against the Lua binding module that provides the
+`pslog_lua_*` symbols, and link against `libpslog` for the core logger API.
+
+Callers initialize `size` and `abi_version` before passing
+`pslog_lua_logger_view` or `pslog_lua_logger_ref` to the helper functions.
+`pslog_lua_check_logger()` returns a borrowed logger view for a live Lua logger.
+`pslog_lua_ref_logger()` keeps the Lua userdata alive through the Lua registry
+and can optionally create a C-owned derived logger with additional fields.
+Release retained references with `pslog_lua_unref_logger()`.
+
+Borrowed views remain owned by Lua and are valid only while the backing userdata
+is live on the owning `lua_State`. After `log:close()`, new interop checks reject
+the closed userdata, while already obtained borrowed or retained logger pointers
+remain allocated until the userdata lifetime or retained reference ends.
+
 ## Examples
 
 Reference examples live under [`examples/`](./examples/):
