@@ -7,6 +7,7 @@
 #include <lua.h>
 
 #include "pslog.h"
+#include "pslog_lua.h"
 
 #define PSLUA_LOGGER_MT "pslog.logger"
 #define PSLUA_WRAPPER_MT "pslog.wrapper"
@@ -45,6 +46,128 @@ typedef struct pslua_wrapper_ud {
 
 static pslua_logger_ud *pslua_check_logger(lua_State *L, int index) {
   return (pslua_logger_ud *)luaL_checkudata(L, index, PSLUA_LOGGER_MT);
+}
+
+static pslua_logger_ud *pslua_test_logger(lua_State *L, int index) {
+  return (pslua_logger_ud *)luaL_testudata(L, index, PSLUA_LOGGER_MT);
+}
+
+static int pslua_validate_view_out(pslog_lua_logger_view *out) {
+  if (out == NULL) {
+    return EINVAL;
+  }
+  if (out->size != sizeof(*out) ||
+      out->abi_version != PSLOG_LUA_INTEROP_ABI_VERSION) {
+    return EPROTO;
+  }
+  out->logger = NULL;
+  out->flags = 0u;
+  return 0;
+}
+
+static int pslua_validate_ref_out(pslog_lua_logger_ref *out) {
+  if (out == NULL) {
+    return EINVAL;
+  }
+  if (out->size != sizeof(*out) ||
+      out->abi_version != PSLOG_LUA_INTEROP_ABI_VERSION) {
+    return EPROTO;
+  }
+  out->L = NULL;
+  out->registry_ref = LUA_NOREF;
+  out->borrowed = NULL;
+  out->derived = NULL;
+  return 0;
+}
+
+int pslog_lua_is_logger(lua_State *L, int index) {
+  pslua_logger_ud *ud;
+
+  if (L == NULL) {
+    return 0;
+  }
+  ud = pslua_test_logger(L, index);
+  return ud != NULL && ud->log != NULL;
+}
+
+int pslog_lua_check_logger(lua_State *L, int index,
+                           pslog_lua_logger_view *out) {
+  pslua_logger_ud *ud;
+  int status;
+
+  status = pslua_validate_view_out(out);
+  if (status != 0) {
+    return status;
+  }
+  if (L == NULL) {
+    return EINVAL;
+  }
+  ud = pslua_test_logger(L, index);
+  if (ud == NULL) {
+    return ENOTTY;
+  }
+  if (ud->log == NULL) {
+    return ENOENT;
+  }
+  out->logger = ud->log;
+  return 0;
+}
+
+int pslog_lua_ref_logger(lua_State *L, int index, const pslog_field *fields,
+                         size_t field_count, pslog_lua_logger_ref *out) {
+  pslog_lua_logger_view view;
+  int abs_index;
+  int status;
+
+  status = pslua_validate_ref_out(out);
+  if (status != 0) {
+    return status;
+  }
+  if (L == NULL || (field_count > 0u && fields == NULL)) {
+    return EINVAL;
+  }
+
+  view.size = sizeof(view);
+  view.abi_version = PSLOG_LUA_INTEROP_ABI_VERSION;
+  status = pslog_lua_check_logger(L, index, &view);
+  if (status != 0) {
+    return status;
+  }
+
+  abs_index = lua_absindex(L, index);
+  lua_pushvalue(L, abs_index);
+  out->registry_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  if (out->registry_ref == LUA_NOREF || out->registry_ref == LUA_REFNIL) {
+    out->registry_ref = LUA_NOREF;
+    return ENOMEM;
+  }
+
+  out->L = L;
+  out->borrowed = view.logger;
+  if (field_count > 0u) {
+    out->derived = pslog_with(view.logger, fields, field_count);
+    if (out->derived == NULL) {
+      pslog_lua_unref_logger(out);
+      return ENOMEM;
+    }
+  }
+  return 0;
+}
+
+void pslog_lua_unref_logger(pslog_lua_logger_ref *ref) {
+  if (ref == NULL) {
+    return;
+  }
+  if (ref->derived != NULL) {
+    ref->derived->destroy(ref->derived);
+  }
+  if (ref->L != NULL && ref->registry_ref != LUA_NOREF) {
+    luaL_unref(ref->L, LUA_REGISTRYINDEX, ref->registry_ref);
+  }
+  ref->L = NULL;
+  ref->registry_ref = LUA_NOREF;
+  ref->borrowed = NULL;
+  ref->derived = NULL;
 }
 
 static int pslua_callback_output_write(void *userdata, const char *data,
@@ -789,6 +912,8 @@ static int pslua_logger_close(lua_State *L) {
 
   if (ud->log != NULL) {
     status = pslog_close(ud->log);
+    ud->log->destroy(ud->log);
+    ud->log = NULL;
   }
   lua_pushboolean(L, status == 0);
   if (status != 0) {

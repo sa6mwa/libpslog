@@ -47,6 +47,7 @@ LUA_ROCK_SOURCES := \
 	lua/scripts/release_version.sh \
 	lua/pslog/init.lua \
 	lua/src/pslog_lua.c \
+	include/pslog_lua.h \
 	include/pslog.h
 GO_PRODUCTION_DATASET := gobencher/benchmark/production_data_generated.go
 GO_PRODUCTION_DATASET_SOURCE := bench/bench_production_dataset.c

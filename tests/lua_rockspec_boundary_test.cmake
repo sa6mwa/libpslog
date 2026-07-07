@@ -26,7 +26,7 @@ endif()
 foreach(required_fragment
         "external_dependencies"
         "LIBPSLOG"
-        "header = \"pslog.h\""
+        "header = \"pslog_lua.h\""
         "library = \"pslog\""
         "\"lua/src/pslog_lua.c\"")
     if(NOT content MATCHES "${required_fragment}")

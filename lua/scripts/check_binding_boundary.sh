@@ -5,6 +5,7 @@ tree="${1:-build/luarocks}"
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "${script_dir}/../.." && pwd)
 public_header="${2:-${repo_root}/include/pslog.h}"
+lua_public_header="${3:-${repo_root}/include/pslog_lua.h}"
 core_so="${tree}/lib/lua/5.5/pslog/core.so"
 
 case "$(uname -s 2>/dev/null || printf unknown)" in
@@ -37,14 +38,18 @@ if ! nm -D --defined-only "${core_so}" | grep -Eq '[[:space:]]luaopen_pslog_core
     exit 1
 fi
 
-if nm -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -Eq '^pslog(_|$)'; then
+if nm -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -Ev '^pslog_lua_' | grep -Eq '^pslog(_|$)'; then
     printf 'lua binding boundary check: %s defines libpslog symbols\n' "${core_so}" >&2
-    nm -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -E '^pslog(_|$)' >&2
+    nm -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -Ev '^pslog_lua_' | grep -E '^pslog(_|$)' >&2
     exit 1
 fi
 
 if [ ! -f "${public_header}" ]; then
     printf 'lua binding boundary check: missing public header %s\n' "${public_header}" >&2
+    exit 1
+fi
+if [ ! -f "${lua_public_header}" ]; then
+    printf 'lua binding boundary check: missing Lua interop header %s\n' "${lua_public_header}" >&2
     exit 1
 fi
 
@@ -56,6 +61,7 @@ trap 'rm -f "${public_symbols}" "${referenced_symbols}" "${private_symbols}"' EX
 {
     sed -nE 's/.*PSLOG_API[[:space:]].*[ *]((pslog|pslog_[A-Za-z0-9_]+))[[:space:]]*\(.*/\1/p' "${public_header}"
     sed -nE 's/.*PSLOG_API[[:space:]]+extern[[:space:]].*[ *]((pslog|pslog_[A-Za-z0-9_]+))[[:space:]]*;.*/\1/p' "${public_header}"
+    sed -nE 's/.*PSLOG_API[[:space:]].*[ *]((pslog_lua_[A-Za-z0-9_]+))[[:space:]]*\(.*/\1/p' "${lua_public_header}"
 } | sort -u > "${public_symbols}"
 
 nm -D --undefined-only "${core_so}" |
