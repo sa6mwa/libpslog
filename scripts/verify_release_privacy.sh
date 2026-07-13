@@ -20,6 +20,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "$build_dir" && -n "$target_id" ]] || usage
+build_dir=$(CDPATH= cd -- "$build_dir" && pwd -P)
+if [[ -n "$darwin_build_dir" ]]; then
+  darwin_build_dir=$(CDPATH= cd -- "$darwin_build_dir" && pwd -P)
+fi
 
 eval "$("$repo_root/scripts/discover_target_tools.sh" --build-dir "$build_dir" --target-id "$target_id")"
 linux_readelf=$READELF
