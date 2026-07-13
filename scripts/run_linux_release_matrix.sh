@@ -75,8 +75,13 @@ fi
 
 cmake --build build/host --target package-single-header
 cmake --build build/host --target package-source
+cmake -DPSLOG_ROOT="$repo_root" -DPSLOG_BINARY_DIR="$repo_root/build/host" -DPSLOG_VERSION="$(./lua/scripts/release_version.sh)" -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
 make release-lua-artifacts
 cmake --build build/host --target package-checksums
-cmake --build build/host --target package-privacy-gate
+if [ -n "$darwin_toolchain" ]; then
+    ./scripts/verify_release_privacy.sh --build-dir build/host --target-id x86_64-linux-gnu --darwin-build-dir build/arm64-apple-darwin-release
+else
+    ./scripts/verify_release_privacy.sh --build-dir build/host --target-id x86_64-linux-gnu
+fi
 
 printf '\nRelease matrix completed successfully.\n'

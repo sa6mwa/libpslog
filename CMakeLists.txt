@@ -453,6 +453,27 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME discover_target_tools_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/discover_target_tools_test.cmake
+    )
+    set_tests_properties(discover_target_tools_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME release_pipeline_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_pipeline_test.cmake
+    )
+    set_tests_properties(release_pipeline_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME public_symbol_visibility_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -681,11 +702,9 @@ add_custom_target(package-checksums
 )
 
 add_custom_target(package-privacy-gate
-    COMMAND ${CMAKE_COMMAND}
-        -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
-        -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-        -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_release_privacy.cmake
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_release_privacy.sh
+        --build-dir ${CMAKE_CURRENT_BINARY_DIR}
+        --target-id ${PSLOG_TARGET_ID}
     DEPENDS package-checksums
     VERBATIM
 )

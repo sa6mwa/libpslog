@@ -73,6 +73,10 @@ ELEVATORPITCH_ARGS ?=
 	test-debug \
 	test-host \
 	test-all \
+	deps-debug \
+	deps-release \
+	deps-cross \
+	clangd \
 	valgrind \
 	coverage \
 	fuzz \
@@ -102,6 +106,7 @@ ELEVATORPITCH_ARGS ?=
 	verify-release-privacy \
 	release-matrix \
 	finalize-slice \
+	release-pipeline \
 	prerelease \
 	prerelease-hardening \
 	print-release-version \
@@ -116,10 +121,14 @@ ELEVATORPITCH_ARGS ?=
 help:
 	@printf '%s\n' \
 		'make build           Configure and build the debug preset.' \
+		'make deps-debug      Provision the pinned native Bootlin collection.' \
+		'make deps-release    Provision all pinned Linux release collections.' \
+		'make deps-cross      Provision the pinned non-host Linux collections.' \
 		'make build-debug     Alias for make build.' \
 		'make build-host      Configure and build the host-native local build.' \
 		'make build-release   Configure and build the full shipped release build matrix.' \
 		'make format          Run clang-format on repo C/C header sources.' \
+		'make clangd          Check native debug sources with host clangd.' \
 		'make test            Run the debug C test suite.' \
 		'make test-debug      Alias for make test.' \
 		'make test-host       Build and run the host-native CTest suite.' \
@@ -152,7 +161,8 @@ help:
 		'make release-matrix  Build/test/package the release target matrix.' \
 		'make finalize-slice  Run formatting and focused local verification.' \
 		'make prerelease      Run deterministic local pre-release checks.' \
-		'make prerelease-hardening Run prerelease plus release matrix.' \
+		'make release         Clean, then run the same proof graph as prerelease.' \
+		'make prerelease-hardening Run prerelease plus the extended AFL++ fuzz pass.' \
 		'make print-release-version Print the version used by release artifacts.' \
 		'make lua-rock        Build and install the Lua module into build/luarocks.' \
 		'make lua-env         Print shell exports for the repo-local Lua rock.' \
@@ -164,6 +174,17 @@ help:
 build:
 	cmake --preset $(DEBUG_PRESET)
 	cmake --build --preset $(DEBUG_PRESET)
+
+deps-debug:
+	./scripts/cpkt-toolchains.sh ensure x86_64-linux-gnu
+
+deps-release:
+	./scripts/cpkt-toolchains.sh ensure all
+
+deps-cross:
+	@set -e; for target in aarch64-linux-gnu aarch64-linux-musl armhf-linux-gnu armhf-linux-musl; do \
+		./scripts/cpkt-toolchains.sh ensure "$$target"; \
+	done
 
 build-debug: build
 
@@ -182,6 +203,9 @@ format:
 	cmake --preset $(DEBUG_PRESET)
 	cmake --build --preset format
 
+clangd: build
+	./scripts/clangd_check.sh
+
 test: build
 	ctest --preset $(DEBUG_PRESET) --output-on-failure
 
@@ -196,7 +220,7 @@ gobencher-tests: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPE
 perf-gate:
 	./bench/run_perf_gate.sh
 
-test-all: test valgrind fuzz-smoke gobencher-tests perf-gate
+test-all: test valgrind fuzz-smoke cross-test gobencher-tests perf-gate
 
 valgrind:
 	cmake --preset $(VALGRIND_PRESET)
@@ -265,7 +289,7 @@ package-source:
 
 package-source-smoke:
 	cmake --preset $(HOST_PRESET)
-	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -P tests/source_archive_smoke_test.cmake
+	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
 
 package-single-header:
 	cmake --preset $(HOST_PRESET)
@@ -278,25 +302,31 @@ package-checksums:
 package-verify:
 	cmake --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(package_archives_test|release_privacy_gate_test)$$' --output-on-failure
-	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -P tests/source_archive_smoke_test.cmake
+	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
 	cmake --build build/$(HOST_PRESET) --target package-privacy-gate
 
 verify-release-archives: package-verify
 
 verify-release-privacy:
 	cmake --preset $(HOST_PRESET)
-	cmake --build build/$(HOST_PRESET) --target package-privacy-gate
+	./scripts/verify_release_privacy.sh --build-dir build/$(HOST_PRESET) --target-id x86_64-linux-gnu
 
 release-matrix:
 	./scripts/run_linux_release_matrix.sh
 
-finalize-slice: format build-host
+finalize-slice: format clangd build-host
 	cmake --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(pslog_tests|pslog_single_header_tests|example_integration_test|public_symbol_visibility_test|darwin_linker_route_test)$$' --output-on-failure
 
-prerelease: format test valgrind lua-test fuzz-smoke package package-verify
+release-pipeline:
+	$(MAKE) format
+	$(MAKE) test-all
+	$(MAKE) lua-test
+	$(MAKE) release-matrix
 
-prerelease-hardening: prerelease gobencher-tests perf-gate fuzz release-matrix
+prerelease: release-pipeline
+
+prerelease-hardening: prerelease fuzz
 
 print-release-version:
 	@./lua/scripts/release_version.sh
@@ -370,7 +400,7 @@ $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATAS
 $(GO_CKVFMT_WRAPPERS): $(GO_PRODUCTION_DATASET) gobencher/cmd/gen_ckvfmt_wrappers/main.go gobencher/benchmark/cpslog_kvfmt.go
 	cd gobencher/benchmark && go run ../cmd/gen_ckvfmt_wrappers
 
-release: clean release-matrix
+release: clean release-pipeline
 
 clean:
 	./scripts/clean.sh
