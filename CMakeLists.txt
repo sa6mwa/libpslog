@@ -4,6 +4,8 @@ include(cmake/pslog_version.cmake)
 
 project(libpslog VERSION ${PSLOG_PROJECT_VERSION_CORE} LANGUAGES C)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 

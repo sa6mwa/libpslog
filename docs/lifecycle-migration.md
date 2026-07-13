@@ -8,7 +8,7 @@ lifecycle. Remove it only after the repository has converged.
 | Distro and `$HOME/.local/cross` Linux compiler paths | Pinned toolchains | Same six Linux target IDs and Darwin osxcross support | Resolver syntax and resolver contract tests |
 | `linux-gnu-release` / `linux-musl-release` preset names | Standard CMake release presets | x86_64 GNU and musl release artifacts | CMake preset listing and release matrix |
 | Host `cc` in Go dataset generation | Lifecycle-owned host compiler | Generated benchmark dataset | Host build then gobencher tests |
-| Compile-command export on every preset | Host-debug clangd surface | `.clangd` consumes only `build/debug`; release, QEMU, and sanitizer presets do not generate compile databases | Debug and release preset cache assertions |
+| clangd configuration | Host-debug developer surface | `.clangd` consumes only `build/debug`; compile databases remain available to every configured preset | `.clangd` readback and CMake preset listing |
 | Package build presets per target | Direct CMake target invocation from configured release preset | Archive, source, single-header, checksum, and privacy gates | `make package-verify` and `make release-matrix` |
 
 Remaining work is limited to verification and any toolchain-specific package
