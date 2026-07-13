@@ -1,6 +1,7 @@
 SHELL := bash
 .DEFAULT_GOAL := help
 MAKEFLAGS += --no-builtin-rules
+.NOTPARALLEL:
 
 DEBUG_PRESET := debug
 HOST_PRESET := host
@@ -55,6 +56,7 @@ GO_PRODUCTION_DATASET_TOOL := bench/gen_go_production_dataset.c
 GO_CKVFMT_WRAPPERS := gobencher/benchmark/cpslog_kvfmt_generated.go
 HOST_GENERATED_VERSION_HEADER := $(CURDIR)/build/host/generated/include/pslog_version.h
 HOST_C_COMPILER = $(shell sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' build/host/CMakeCache.txt | head -n 1)
+HOST_CXX_COMPILER = $(shell sed -n 's/^CMAKE_CXX_COMPILER:FILEPATH=//p' build/host/CMakeCache.txt | head -n 1)
 
 BENCH_ITERS ?= 200000
 FUZZ_TIME ?= 30
@@ -167,7 +169,6 @@ help:
 		'make lua-rock        Build and install the Lua module into build/luarocks.' \
 		'make lua-env         Print shell exports for the repo-local Lua rock.' \
 		'make lua-test        Run the Lua binding smoke tests.' \
-		'make release         Clean generated state, then run the full release matrix.' \
 		'make clean           Remove build/ and dist/ generated artifacts.' \
 		'make clean-dist      Remove dist/ release artifacts.'
 
@@ -215,10 +216,10 @@ test-host: build-host
 	ctest --preset $(HOST_PRESET) --output-on-failure
 
 gobencher-tests: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	cd gobencher && go test -a ./...
+	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test -a ./...
 
-perf-gate:
-	./bench/run_perf_gate.sh
+perf-gate: build-host
+	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./bench/run_perf_gate.sh
 
 test-all: test valgrind fuzz-smoke cross-test gobencher-tests perf-gate
 
@@ -246,7 +247,7 @@ benchmarks-c: build-host
 	./build/host/pslog_bench $(BENCH_ITERS) all
 
 benchmarks-gobencher: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	cd gobencher && go test ./benchmark -run '^$$' -bench . -benchmem -count=$(GO_BENCH_COUNT)
+	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test ./benchmark -run '^$$' -bench . -benchmem -count=$(GO_BENCH_COUNT)
 
 benchmarks-go: benchmarks-gobencher
 
@@ -259,7 +260,7 @@ bench: benchmarks
 bench-gate: perf-gate
 
 elevatorpitch: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && cd gobencher && go run ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
+	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
 
 cross-build:
 	@set -e; for preset in $(CROSS_RELEASE_PRESETS); do \
@@ -383,11 +384,11 @@ $(LUA_ROCKSPEC): $(LUA_ROCK_SOURCES)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_ROCKSPEC)" "git+file://$(CURDIR)"
 
 $(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) build-host
-	flock "$(LUA_ROCK_BUILD_LOCK)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
+	flock "$(LUA_ROCK_BUILD_LOCK)" env CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
 
 lua-test: lua-rock
 	LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}" ./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
-	./lua/scripts/run_interop_embedder_test.sh "$(LUA_LOCAL_LIBDIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)"
+	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./lua/scripts/run_interop_embedder_test.sh "$(LUA_LOCAL_LIBDIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)"
 	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && lua lua/tests/test_pslog.lua
 
 $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATASET_TOOL) $(GO_PRODUCTION_DATASET_SOURCE)
@@ -398,9 +399,11 @@ $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATAS
 	rm -f "$$tmp_bin"
 
 $(GO_CKVFMT_WRAPPERS): $(GO_PRODUCTION_DATASET) gobencher/cmd/gen_ckvfmt_wrappers/main.go gobencher/benchmark/cpslog_kvfmt.go
-	cd gobencher/benchmark && go run ../cmd/gen_ckvfmt_wrappers
+	cd gobencher/benchmark && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ../cmd/gen_ckvfmt_wrappers
 
-release: clean release-pipeline
+release:
+	$(MAKE) clean
+	$(MAKE) release-pipeline
 
 clean:
 	./scripts/clean.sh

@@ -83,4 +83,16 @@ if(NOT EXISTS "${unrelated_file}")
     message(FATAL_ERROR "cmake clean wrapper removed unrelated files under ${clean_test_root}")
 endif()
 
+execute_process(
+    COMMAND "${PSLOG_ROOT}/scripts/clean.sh" --root /tmp
+    RESULT_VARIABLE unsafe_root_result
+    ERROR_VARIABLE unsafe_root_error
+)
+if(unsafe_root_result EQUAL 0)
+    message(FATAL_ERROR "clean script accepted an unsafe root outside generated state")
+endif()
+if(NOT unsafe_root_error MATCHES "refusing cleanup root outside")
+    message(FATAL_ERROR "clean script did not explain unsafe-root refusal: ${unsafe_root_error}")
+endif()
+
 file(REMOVE_RECURSE "${clean_test_root}")

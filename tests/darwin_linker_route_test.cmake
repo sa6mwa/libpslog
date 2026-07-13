@@ -20,7 +20,7 @@ foreach(tool clang ar ranlib ld install_name_tool strip otool)
     if(tool STREQUAL "clang")
         file(WRITE "${tool_path}"
 "#!/bin/sh
-expected='-fuse-ld=${fake_ld}'
+expected='--ld-path=${fake_ld}'
 output=''
 found=0
 previous=''
@@ -70,13 +70,13 @@ foreach(linker_flags
         CMAKE_EXE_LINKER_FLAGS
         CMAKE_SHARED_LINKER_FLAGS
         CMAKE_MODULE_LINKER_FLAGS)
-    if(NOT "${${linker_flags}}" MATCHES "-fuse-ld=${fake_ld}")
+    if(NOT "${${linker_flags}}" MATCHES "--ld-path=${fake_ld}")
         message(FATAL_ERROR
             "Darwin toolchain did not force ${linker_flags} through target ld: ${${linker_flags}}")
     endif()
-    if("${${linker_flags}}" MATCHES "--ld-path=")
+    if("${${linker_flags}}" MATCHES "-fuse-ld=")
         message(FATAL_ERROR
-            "Darwin toolchain still uses --ld-path instead of lifecycle -fuse-ld: ${${linker_flags}}")
+            "Darwin toolchain still uses deprecated absolute -fuse-ld: ${${linker_flags}}")
     endif()
 endforeach()
 

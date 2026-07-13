@@ -132,8 +132,9 @@ if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER)
     set(JANSSON_WITHOUT_TESTS ON CACHE BOOL "" FORCE)
     set(JANSSON_INSTALL OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(jansson
-        GIT_REPOSITORY https://github.com/akheron/jansson.git
-        GIT_TAG v2.15.0
+        URL https://github.com/akheron/jansson/releases/download/v2.15.0/jansson-2.15.0.tar.gz
+        URL_HASH SHA256=070a629590723228dc3b744ae90e965a569efb9c535b3309b52e80e75d8eb3be
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(jansson)
     set_target_properties(jansson PROPERTIES
@@ -442,6 +443,16 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME preset_contract_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/preset_contract_test.cmake
+    )
+    set_tests_properties(preset_contract_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME darwin_linker_route_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -656,9 +667,7 @@ add_custom_target(package-archive
         -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
-        -DPSLOG_STRIP=${CMAKE_STRIP}
-        -DPSLOG_READELF=${CMAKE_READELF}
-        -DPSLOG_OTOOL=${CPKT_OTOOL}
+        -DPSLOG_TARGET_TOOL_DISCOVERY=${CMAKE_CURRENT_SOURCE_DIR}/scripts/discover_target_tools.sh
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_archive.cmake
     DEPENDS pslog_shared pslog_static
     VERBATIM

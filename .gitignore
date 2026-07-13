@@ -4,3 +4,4 @@
 /gobencher/benchmark/cpslog_kvfmt_generated.go
 *.out
 /stash/
+/VERSION

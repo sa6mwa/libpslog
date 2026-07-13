@@ -10,7 +10,20 @@ out_dir="${repo_root}/build/lua-interop"
 test_bin="${out_dir}/pslog_lua_interop_tests"
 installed_consumer_src="${out_dir}/installed_rock_consumer.c"
 installed_consumer_bin="${out_dir}/installed_rock_consumer"
-cc_bin="${CC:-cc}"
+if [ -n "${CC:-}" ]; then
+    cc_bin="${CC}"
+else
+    cache_file="${build_dir}/CMakeCache.txt"
+    if [ ! -f "${cache_file}" ]; then
+        printf 'lua interop embedder test: missing configured Bootlin compiler cache: %s\n' "${cache_file}" >&2
+        exit 1
+    fi
+    cc_bin=$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' "${cache_file}" | tail -n 1)
+fi
+if [ -z "${cc_bin}" ] || [ ! -x "${cc_bin}" ]; then
+    printf 'lua interop embedder test: configured C compiler is unavailable: %s\n' "${cc_bin:-<empty>}" >&2
+    exit 1
+fi
 cflags="${CFLAGS:-}"
 ldflags="${LDFLAGS:-}"
 
@@ -64,13 +77,7 @@ if [ -z "${installed_core}" ]; then
     exit 1
 fi
 
-cat >"${installed_consumer_src}" <<'EOF'
-#include <pslog_lua.h>
-
-int main(void) {
-  return pslog_lua_is_logger(NULL, 0) == 0 ? 0 : 1;
-}
-EOF
+installed_consumer_src="${repo_root}/tests/lua_interop_installed_consumer.c"
 
 "${cc_bin}" -std=c99 -Wall -Wextra -Werror ${cflags} \
     -I"${installed_header_dir}" \

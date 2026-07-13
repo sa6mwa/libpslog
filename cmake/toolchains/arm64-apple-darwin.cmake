@@ -83,7 +83,7 @@ foreach(_pslog_required_tool
     endif()
 endforeach()
 
-set(_pslog_darwin_linker_flag "-fuse-ld=${CMAKE_LINKER}")
+set(_pslog_darwin_linker_flag "--ld-path=${CMAKE_LINKER}")
 foreach(_pslog_linker_flags
         CMAKE_EXE_LINKER_FLAGS
         CMAKE_SHARED_LINKER_FLAGS

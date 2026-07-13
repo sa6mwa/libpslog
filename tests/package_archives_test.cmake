@@ -26,6 +26,26 @@ if(NOT checksum_build_result EQUAL 0)
     message(FATAL_ERROR "failed to build package checksums")
 endif()
 
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" --build "${PSLOG_BINARY_DIR}" --target package-single-header
+    RESULT_VARIABLE repeat_single_header_result
+)
+if(NOT repeat_single_header_result EQUAL 0)
+    message(FATAL_ERROR "failed to rebuild the single-header artifact")
+endif()
+execute_process(
+    COMMAND sha256sum -c "${checksums_file}"
+    WORKING_DIRECTORY "${PSLOG_ROOT}/dist"
+    RESULT_VARIABLE stable_checksum_result
+    OUTPUT_VARIABLE stable_checksum_output
+    ERROR_VARIABLE stable_checksum_error
+)
+if(NOT stable_checksum_result EQUAL 0)
+    message(FATAL_ERROR
+        "single-header rebuild changed the checksum-listed artifact:\n"
+        "${stable_checksum_output}${stable_checksum_error}")
+endif()
+
 function(assert_archive_layout archive_path)
     if(NOT EXISTS "${archive_path}")
         message(FATAL_ERROR "missing archive: ${archive_path}")

@@ -38,6 +38,16 @@ require_command go
 require_command awk
 require_command mktemp
 
+if [[ -z "${CC:-}" || ! -x "${CC}" ]]; then
+    printf 'perf gate requires CC to name the configured Bootlin C compiler\n' >&2
+    exit 1
+fi
+if [[ -z "${CXX:-}" || ! -x "${CXX}" ]]; then
+    printf 'perf gate requires CXX to name the configured Bootlin C++ compiler\n' >&2
+    exit 1
+fi
+export CC CXX
+
 PSLOG_PERF_C_ITERS="${PSLOG_PERF_C_ITERS:-200000}"
 PSLOG_PERF_C_TOLERANCE="${PSLOG_PERF_C_TOLERANCE:-0.50}"
 PSLOG_PERF_LUA_TOLERANCE="${PSLOG_PERF_LUA_TOLERANCE:-0.50}"

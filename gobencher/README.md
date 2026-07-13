@@ -37,8 +37,8 @@ The embedded-Lua compare path loads the shipped rock from `../build/luarocks`.
 ## Useful Commands
 
 ```sh
-go test ./...
-go test ./benchmark -run '^$' -bench . -benchmem
+make gobencher-tests
+make benchmarks-gobencher
 make -C .. elevatorpitch
 make -C .. elevatorpitch ELEVATORPITCH_ARGS='-duration=3s -interval=100ms -limit=512'
 make -C .. elevatorpitch ELEVATORPITCH_ARGS='-include-quill'

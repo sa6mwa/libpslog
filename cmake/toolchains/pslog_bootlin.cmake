@@ -39,6 +39,54 @@ function(pslog_configure_bootlin_toolchain target_id)
         set(bootlin_${key} "${CMAKE_MATCH_1}")
     endforeach()
 
+    file(REAL_PATH "${bootlin_root}" bootlin_root_real)
+    file(REAL_PATH "${bootlin_sysroot}" bootlin_sysroot_real)
+    foreach(required_root IN ITEMS "${bootlin_root_real}" "${bootlin_sysroot_real}")
+        if(NOT IS_DIRECTORY "${required_root}")
+            message(FATAL_ERROR "Bootlin resolver returned a missing root for ${target_id}: ${required_root}")
+        endif()
+    endforeach()
+
+    execute_process(
+        COMMAND "${bootlin_cc}" -print-prog-name=ld
+        RESULT_VARIABLE bootlin_linker_result
+        OUTPUT_VARIABLE bootlin_reported_linker
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE bootlin_linker_error
+    )
+    if(NOT bootlin_linker_result EQUAL 0 OR NOT IS_ABSOLUTE "${bootlin_reported_linker}")
+        message(FATAL_ERROR
+            "Bootlin compiler did not report an absolute linker for ${target_id}: "
+            "${bootlin_reported_linker} ${bootlin_linker_error}")
+    endif()
+    file(REAL_PATH "${bootlin_reported_linker}" bootlin_reported_linker_real)
+    string(FIND "${bootlin_reported_linker_real}" "${bootlin_root_real}/" bootlin_linker_in_root)
+    if(NOT bootlin_linker_in_root EQUAL 0)
+        message(FATAL_ERROR
+            "Bootlin compiler linker escaped its pinned root for ${target_id}: "
+            "${bootlin_reported_linker_real} is not below ${bootlin_root_real}")
+    endif()
+
+    execute_process(
+        COMMAND "${bootlin_cc}" "--sysroot=${bootlin_sysroot}" -print-file-name=libc.so
+        RESULT_VARIABLE bootlin_libc_result
+        OUTPUT_VARIABLE bootlin_reported_libc
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE bootlin_libc_error
+    )
+    if(NOT bootlin_libc_result EQUAL 0 OR NOT IS_ABSOLUTE "${bootlin_reported_libc}")
+        message(FATAL_ERROR
+            "Bootlin compiler did not report libc from its sysroot for ${target_id}: "
+            "${bootlin_reported_libc} ${bootlin_libc_error}")
+    endif()
+    file(REAL_PATH "${bootlin_reported_libc}" bootlin_reported_libc_real)
+    string(FIND "${bootlin_reported_libc_real}" "${bootlin_sysroot_real}/" bootlin_libc_in_sysroot)
+    if(NOT bootlin_libc_in_sysroot EQUAL 0)
+        message(FATAL_ERROR
+            "Bootlin compiler libc escaped its configured sysroot for ${target_id}: "
+            "${bootlin_reported_libc_real} is not below ${bootlin_sysroot_real}")
+    endif()
+
     set(CMAKE_C_COMPILER "${bootlin_cc}" CACHE FILEPATH "" FORCE)
     set(CMAKE_CXX_COMPILER "${bootlin_cxx}" CACHE FILEPATH "" FORCE)
     set(CMAKE_C_COMPILER_TARGET "${bootlin_target_triple}" CACHE STRING "" FORCE)
