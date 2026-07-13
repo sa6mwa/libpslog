@@ -252,6 +252,7 @@ test-cross: cross-test
 
 package:
 	cmake --preset $(HOST_PRESET)
+	cmake --build build/$(HOST_PRESET) --target package-clean-dist
 	cmake --build build/$(HOST_PRESET) --target package-archive
 	cmake --build build/$(HOST_PRESET) --target package-single-header
 	cmake --build build/$(HOST_PRESET) --target package-source
@@ -293,7 +294,7 @@ finalize-slice: format build-host
 	cmake --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(pslog_tests|pslog_single_header_tests|example_integration_test|public_symbol_visibility_test|darwin_linker_route_test)$$' --output-on-failure
 
-prerelease: format test valgrind lua-test fuzz-smoke package-verify
+prerelease: format test valgrind lua-test fuzz-smoke package package-verify
 
 prerelease-hardening: prerelease gobencher-tests perf-gate fuzz release-matrix
 
