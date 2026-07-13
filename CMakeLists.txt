@@ -551,14 +551,14 @@ if(PSLOG_BUILD_BENCHMARKS)
     )
 
     if(PSLOG_BENCHMARK_WITH_LIBLOGGER)
-        FetchContent_Declare(liblogger
-            GIT_REPOSITORY https://github.com/briandowns/liblogger.git
-            GIT_TAG 3ecb5c636b5a97fc35d0a6373a3238f1596be82a
-        )
-        FetchContent_GetProperties(liblogger)
-        if(NOT liblogger_POPULATED)
-            FetchContent_Populate(liblogger)
-        endif()
+        pslog_acquire_verified_archive(
+            COMPONENT liblogger URL https://github.com/briandowns/liblogger/archive/3ecb5c636b5a97fc35d0a6373a3238f1596be82a.tar.gz
+            SHA256 c10ce24f036291e3b52c32a30f1bf53eb3d518693adac1c7d70e4ea87f974464
+            OUTPUT liblogger_archive)
+        pslog_stage_dependency_archive(
+            COMPONENT liblogger ARCHIVE "${liblogger_archive}"
+            SHA256 c10ce24f036291e3b52c32a30f1bf53eb3d518693adac1c7d70e4ea87f974464
+            OUTPUT liblogger_SOURCE_DIR)
 
         target_sources(pslog_bench_liblogger PRIVATE
             bench/bench_liblogger.c
@@ -572,7 +572,7 @@ if(PSLOG_BUILD_BENCHMARKS)
         set_source_files_properties(
             bench/bench_liblogger.c
             ${liblogger_SOURCE_DIR}/logger.c
-            PROPERTIES COMPILE_OPTIONS "-std=gnu99"
+            PROPERTIES COMPILE_OPTIONS "-std=gnu99;-Wno-pedantic"
         )
         target_compile_definitions(pslog_bench_liblogger PRIVATE PSLOG_HAVE_LIBLOGGER_BENCH=1)
     endif()
@@ -587,14 +587,14 @@ if(PSLOG_BUILD_BENCHMARKS)
         enable_language(CXX)
 
         add_library(pslog_bench_quill SHARED bench/bench_quill.cpp)
-        FetchContent_Declare(quill
-            GIT_REPOSITORY https://github.com/odygrd/quill.git
-            GIT_TAG 7c0ffa54e51c2b8db6ec091c2922aeaf9b3b08c0
-        )
-        FetchContent_GetProperties(quill)
-        if(NOT quill_POPULATED)
-            FetchContent_Populate(quill)
-        endif()
+        pslog_acquire_verified_archive(
+            COMPONENT quill URL https://github.com/odygrd/quill/archive/7c0ffa54e51c2b8db6ec091c2922aeaf9b3b08c0.tar.gz
+            SHA256 d8072c2a9c079200d16164b40bfa26ce7690488ab647b5cb48ee5e84a13c0e76
+            OUTPUT quill_archive)
+        pslog_stage_dependency_archive(
+            COMPONENT quill ARCHIVE "${quill_archive}"
+            SHA256 d8072c2a9c079200d16164b40bfa26ce7690488ab647b5cb48ee5e84a13c0e76
+            OUTPUT quill_SOURCE_DIR)
 
         target_include_directories(pslog_bench_quill PRIVATE
             ${quill_SOURCE_DIR}/include
