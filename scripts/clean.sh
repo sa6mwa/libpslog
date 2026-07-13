@@ -56,7 +56,7 @@ esac
 remove_path() {
     target_path="$1"
     case "$target_path" in
-        "$root_dir"/build|"$root_dir"/dist) ;;
+        "$root_dir"/build|"$root_dir"/dist|"$root_dir"/.cache) ;;
         *)
             printf 'clean.sh: refusing unsafe generated-state deletion: %s\n' "$target_path" >&2
             exit 1
@@ -69,6 +69,7 @@ remove_path() {
 
 if [ "$mode" = "all" ]; then
     remove_path "$root_dir/build"
+    remove_path "$root_dir/.cache"
 fi
 
 remove_path "$root_dir/dist"

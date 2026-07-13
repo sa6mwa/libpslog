@@ -1,0 +1,31 @@
+if(NOT DEFINED PSLOG_BINARY_DIR OR NOT DEFINED PSLOG_ROOT)
+    message(FATAL_ERROR "PSLOG_BINARY_DIR and PSLOG_ROOT are required")
+endif()
+
+set(test_root "${PSLOG_BINARY_DIR}/dependency-cache-test")
+set(CPKT_DEPENDENCY_CACHE "${test_root}/shared-cache")
+set(PSLOG_DEPENDENCY_TEST_ALLOW_FILE_URL TRUE)
+file(REMOVE_RECURSE "${test_root}")
+file(MAKE_DIRECTORY "${test_root}")
+set(source_archive "${test_root}/fixture.tar.gz")
+file(WRITE "${source_archive}" "verified fixture archive\n")
+file(SHA256 "${source_archive}" fixture_sha256)
+
+include("${PSLOG_ROOT}/cmake/pslog_dependencies.cmake")
+pslog_acquire_verified_archive(
+    COMPONENT fixture URL "file://${source_archive}" SHA256 "${fixture_sha256}" OUTPUT first_archive)
+if(NOT EXISTS "${first_archive}")
+    message(FATAL_ERROR "cache miss did not publish an archive")
+endif()
+file(SHA256 "${first_archive}" first_digest)
+if(NOT first_digest STREQUAL fixture_sha256)
+    message(FATAL_ERROR "published archive is not checksum verified")
+endif()
+
+file(REMOVE "${source_archive}")
+pslog_acquire_verified_archive(
+    COMPONENT fixture URL "file://${source_archive}" SHA256 "${fixture_sha256}" OUTPUT offline_archive)
+if(NOT offline_archive STREQUAL first_archive)
+    message(FATAL_ERROR "offline cache hit did not reuse the verified archive")
+endif()
+file(REMOVE_RECURSE "${test_root}")

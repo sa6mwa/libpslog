@@ -117,6 +117,7 @@ option(PSLOG_BUILD_LUA "Enable the Lua facade checks" ON)
 option(PSLOG_BENCHMARK_WITH_LIBLOGGER "Enable optional benchmark-only liblogger comparisons" OFF)
 option(PSLOG_BENCHMARK_WITH_QUILL "Enable optional benchmark-only Quill comparisons" OFF)
 option(PSLOG_ENABLE_COVERAGE "Build test targets with gcov coverage instrumentation" OFF)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/pslog_dependencies.cmake")
 set(PSLOG_DEPENDENCY_MODE "bundled-sdk" CACHE STRING
     "Dependency resolution mode used by lifecycle presets")
 set_property(CACHE PSLOG_DEPENDENCY_MODE PROPERTY STRINGS bundled-sdk)
@@ -131,11 +132,15 @@ if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER)
     set(JANSSON_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(JANSSON_WITHOUT_TESTS ON CACHE BOOL "" FORCE)
     set(JANSSON_INSTALL OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(jansson
-        URL https://github.com/akheron/jansson/releases/download/v2.15.0/jansson-2.15.0.tar.gz
-        URL_HASH SHA256=070a629590723228dc3b744ae90e965a569efb9c535b3309b52e80e75d8eb3be
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    )
+    pslog_acquire_verified_archive(
+        COMPONENT jansson URL https://github.com/akheron/jansson/releases/download/v2.15.0/jansson-2.15.0.tar.gz
+        SHA256 070a629590723228dc3b744ae90e965a569efb9c535b3309b52e80e75d8eb3be
+        OUTPUT jansson_archive)
+    pslog_stage_dependency_archive(
+        COMPONENT jansson ARCHIVE "${jansson_archive}"
+        SHA256 070a629590723228dc3b744ae90e965a569efb9c535b3309b52e80e75d8eb3be
+        OUTPUT jansson_source_dir)
+    FetchContent_Declare(jansson SOURCE_DIR "${jansson_source_dir}")
     FetchContent_MakeAvailable(jansson)
     set_target_properties(jansson PROPERTIES
         C_STANDARD 99
@@ -449,6 +454,17 @@ if(PSLOG_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/preset_contract_test.cmake
     )
     set_tests_properties(preset_contract_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME dependency_cache_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/dependency_cache_test.cmake
+    )
+    set_tests_properties(dependency_cache_test PROPERTIES
         RUN_SERIAL TRUE
         LABELS "local;smoke"
         TIMEOUT 30
