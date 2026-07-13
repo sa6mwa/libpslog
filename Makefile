@@ -4,7 +4,7 @@ MAKEFLAGS += --no-builtin-rules
 
 DEBUG_PRESET := debug
 HOST_PRESET := host
-ASAN_PRESET := asan
+VALGRIND_PRESET := valgrind
 FUZZ_PRESET := fuzz
 COVERAGE_PRESET := coverage
 RELEASE_BUILD_PRESETS := \
@@ -58,6 +58,7 @@ HOST_C_COMPILER = $(shell sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' build/host/C
 
 BENCH_ITERS ?= 200000
 FUZZ_TIME ?= 30
+FUZZ_LONG_TIME ?= 300
 GO_BENCH_COUNT ?= 1
 ELEVATORPITCH_ARGS ?=
 
@@ -72,7 +73,7 @@ ELEVATORPITCH_ARGS ?=
 	test-debug \
 	test-host \
 	test-all \
-	asan \
+	valgrind \
 	coverage \
 	fuzz \
 	fuzz-smoke \
@@ -122,12 +123,12 @@ help:
 		'make test            Run the debug C test suite.' \
 		'make test-debug      Alias for make test.' \
 		'make test-host       Build and run the host-native CTest suite.' \
-		'make test-all        Run C tests, Go gobencher tests, and the Go-vs-C perf gate.' \
-		'make asan            Run the ASan/UBSan preset test suite.' \
+		'make test-all        Run C tests, native hardening, Go gobencher tests, and the Go-vs-C perf gate.' \
+		'make valgrind        Run the native Valgrind memory-check gate.' \
 		'make coverage        Run the coverage preset and generate coverage-report.' \
-		'make fuzz            Build fuzz target and run two bounded fuzz passes.' \
+		'make fuzz            Run a bounded native AFL++ fuzz job.' \
 		'make fuzz-smoke      Run a short fuzz smoke pass.' \
-		'make fuzz-long       Run a longer opt-in fuzz pass (FUZZ_TIME=$(FUZZ_TIME)).' \
+		'make fuzz-long       Run a longer native AFL++ fuzz job (FUZZ_LONG_TIME=$(FUZZ_LONG_TIME)).' \
 		'make bench           Alias for make benchmarks.' \
 		'make bench-gate      Alias for make perf-gate.' \
 		'make benchmarks-c    Run the pure C benchmark matrix (BENCH_ITERS=$(BENCH_ITERS)).' \
@@ -195,12 +196,12 @@ gobencher-tests: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPE
 perf-gate:
 	./bench/run_perf_gate.sh
 
-test-all: test gobencher-tests perf-gate
+test-all: test valgrind fuzz-smoke gobencher-tests perf-gate
 
-asan:
-	cmake --preset $(ASAN_PRESET)
-	cmake --build --preset $(ASAN_PRESET)
-	ctest --preset $(ASAN_PRESET) --output-on-failure
+valgrind:
+	cmake --preset $(VALGRIND_PRESET)
+	cmake --build --preset $(VALGRIND_PRESET)
+	valgrind --leak-check=full --track-origins=yes --error-exitcode=1 ./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
 
 coverage:
 	cmake --preset $(COVERAGE_PRESET)
@@ -209,20 +210,13 @@ coverage:
 	cmake --build --preset coverage-report
 
 fuzz:
-	cmake --preset $(FUZZ_PRESET)
-	cmake --build --preset $(FUZZ_PRESET)
-	./build/fuzz/pslog_fuzz -max_total_time=$(FUZZ_TIME)
-	./build/fuzz/pslog_fuzz -max_total_time=$(FUZZ_TIME) -max_len=256
+	./scripts/fuzz.sh run $(FUZZ_TIME)
 
 fuzz-smoke:
-	cmake --preset $(FUZZ_PRESET)
-	cmake --build --preset $(FUZZ_PRESET)
-	./build/fuzz/pslog_fuzz -max_total_time=5 -max_len=256
+	./scripts/fuzz.sh smoke 5
 
 fuzz-long:
-	cmake --preset $(FUZZ_PRESET)
-	cmake --build --preset $(FUZZ_PRESET)
-	./build/fuzz/pslog_fuzz -max_total_time=$(FUZZ_TIME)
+	./scripts/fuzz.sh long $(FUZZ_LONG_TIME)
 
 benchmarks-c: build-host
 	./build/host/pslog_bench $(BENCH_ITERS) all
@@ -299,7 +293,7 @@ finalize-slice: format build-host
 	cmake --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(pslog_tests|pslog_single_header_tests|example_integration_test|public_symbol_visibility_test|darwin_linker_route_test)$$' --output-on-failure
 
-prerelease: format test asan lua-test fuzz-smoke package-verify
+prerelease: format test valgrind lua-test fuzz-smoke package-verify
 
 prerelease-hardening: prerelease gobencher-tests perf-gate fuzz release-matrix
 
@@ -358,11 +352,11 @@ $(LUA_ROCKSPEC): $(LUA_ROCK_SOURCES)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_ROCKSPEC)" "git+file://$(CURDIR)"
 
 $(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) build-host
-	CC="$(HOST_C_COMPILER)" flock "$(LUA_ROCK_BUILD_LOCK)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
+	flock "$(LUA_ROCK_BUILD_LOCK)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
 
 lua-test: lua-rock
 	LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}" ./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
-	CC="$(HOST_C_COMPILER)" ./lua/scripts/run_interop_embedder_test.sh "$(LUA_LOCAL_LIBDIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)"
+	./lua/scripts/run_interop_embedder_test.sh "$(LUA_LOCAL_LIBDIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)"
 	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && lua lua/tests/test_pslog.lua
 
 $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATASET_TOOL) $(GO_PRODUCTION_DATASET_SOURCE)

@@ -64,41 +64,6 @@ function(pslog_enable_coverage_if_requested target)
     endif()
 endfunction()
 
-function(pslog_assert_fuzz_toolchain_supported)
-    set(fuzz_probe_dir "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/fuzz-toolchain-probe")
-    set(fuzz_probe_source "${fuzz_probe_dir}/probe.c")
-    set(fuzz_probe_binary "${fuzz_probe_dir}/probe")
-
-    file(MAKE_DIRECTORY "${fuzz_probe_dir}")
-    file(WRITE "${fuzz_probe_source}" [=[
-int LLVMFuzzerTestOneInput(const unsigned char *data, unsigned long size) {
-    (void)data;
-    (void)size;
-    return 0;
-}
-]=])
-
-    execute_process(
-        COMMAND "${CMAKE_C_COMPILER}"
-            -v
-            -fsanitize=fuzzer,address
-            -fno-omit-frame-pointer
-            "${fuzz_probe_source}"
-            -o "${fuzz_probe_binary}"
-        RESULT_VARIABLE fuzz_probe_result
-        OUTPUT_VARIABLE fuzz_probe_stdout
-        ERROR_VARIABLE fuzz_probe_stderr
-    )
-
-    if(NOT fuzz_probe_result EQUAL 0)
-        message(FATAL_ERROR
-            "PSLOG_BUILD_FUZZ=ON requires a C toolchain that can link -fsanitize=fuzzer,address. "
-            "The selected compiler is '${CMAKE_C_COMPILER}'. Install the matching compiler-rt/libFuzzer runtime "
-            "for this Clang toolchain or use a Clang toolchain that provides those libraries.\n"
-            "clang output:\n${fuzz_probe_stdout}\n${fuzz_probe_stderr}")
-    endif()
-endfunction()
-
 find_program(CLANG_FORMAT_BIN NAMES clang-format)
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
@@ -335,6 +300,20 @@ if(PSLOG_BUILD_TESTS)
     pslog_enable_coverage_if_requested(pslog_tests)
     add_test(NAME pslog_tests COMMAND pslog_tests)
     pslog_set_test_properties(pslog_tests "unit;local" 30)
+
+    # Keep the native Valgrind gate deliberately small.  The full unit binary
+    # also exercises intentional termination children and large benchmark
+    # fixtures, neither of which is part of the facade memory-check contract.
+    add_executable(pslog_valgrind_facade_tests tests/valgrind_facade_test.c)
+    target_include_directories(pslog_valgrind_facade_tests PRIVATE
+        ${PSLOG_GENERATED_INCLUDE_DIR}
+        include
+    )
+    target_link_libraries(pslog_valgrind_facade_tests PRIVATE pslog_static)
+    pslog_configure_project_warnings(pslog_valgrind_facade_tests)
+    pslog_enable_coverage_if_requested(pslog_valgrind_facade_tests)
+    add_test(NAME pslog_valgrind_facade_tests COMMAND pslog_valgrind_facade_tests)
+    pslog_set_test_properties(pslog_valgrind_facade_tests "unit;local;memory-check" 30)
     if(PSLOG_BUILD_LUA AND PSLOG_LUA_FOUND)
         add_executable(pslog_lua_interop_tests
             tests/lua_interop_embedder_test.c
@@ -506,7 +485,7 @@ if(PSLOG_BUILD_TESTS)
         TIMEOUT 60
     )
     add_custom_target(pslog_ctest_prerequisites
-        DEPENDS pslog_tests pslog_single_header_tests pslog_shared
+        DEPENDS pslog_tests pslog_valgrind_facade_tests pslog_single_header_tests pslog_shared
     )
 endif()
 
@@ -599,17 +578,10 @@ if(PSLOG_BUILD_BENCHMARKS)
 endif()
 
 if(PSLOG_BUILD_FUZZ)
-    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-        message(FATAL_ERROR "PSLOG_BUILD_FUZZ=ON requires Clang as the C compiler")
-    endif()
-    pslog_assert_fuzz_toolchain_supported()
-
     add_executable(pslog_fuzz fuzz/pslog_fuzz.c)
     target_include_directories(pslog_fuzz PRIVATE include)
     target_link_libraries(pslog_fuzz PRIVATE pslog_static)
     pslog_configure_c_target(pslog_fuzz)
-    target_compile_options(pslog_fuzz PRIVATE -fsanitize=fuzzer,address)
-    target_link_options(pslog_fuzz PRIVATE -fsanitize=fuzzer,address)
 endif()
 
 execute_process(

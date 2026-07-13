@@ -291,20 +291,16 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Address-sanitized run:
+Native Valgrind check:
 
 ```sh
-cmake --preset asan
-cmake --build --preset asan
-ctest --preset asan
+make valgrind
 ```
 
 Fuzzing:
 
 ```sh
-cmake --preset fuzz
-cmake --build --preset fuzz
-./build/fuzz/pslog_fuzz -runs=1000
+make fuzz
 ```
 
 ## Release Matrix
@@ -332,6 +328,8 @@ and packages `arm64-apple-darwin`.
 Toolchain expectations:
 
 - Linux presets provision checksum-pinned Bootlin GCC collections through `scripts/cpkt-toolchains.sh`; host compilers and binutils are never selected.
+- Native memory checking uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection.
+- `clang-format` and `clangd` are host development tools only. `.clangd` uses the native debug compile database; cross builds, packages, and releases do not invoke it.
 - The shared cache is `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}` and survives `make clean`.
 - Cross test execution requires `qemu-aarch64` and `qemu-arm`; each uses the matching Bootlin sysroot.
 - `arm64-apple-darwin` expects osxcross under `OSXCROSS_ROOT` or `$HOME/.local/cross/osxcross`.

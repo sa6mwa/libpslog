@@ -15,7 +15,7 @@ file(REMOVE_RECURSE "${test_root}")
 file(MAKE_DIRECTORY "${fake_bin}")
 file(MAKE_DIRECTORY "${fake_osxcross_root}/SDK/MacOSX15.sdk/usr/include")
 
-foreach(tool clang ar ranlib ld install_name_tool strip)
+foreach(tool clang ar ranlib ld install_name_tool strip otool)
     set(tool_path "${fake_bin}/${fake_host}-${tool}")
     if(tool STREQUAL "clang")
         file(WRITE "${tool_path}"
@@ -58,6 +58,12 @@ if(NOT CMAKE_LINKER STREQUAL "${fake_ld}")
         "Darwin toolchain did not select target ld\n"
         "expected: ${fake_ld}\n"
         "actual: ${CMAKE_LINKER}")
+endif()
+if(NOT CPKT_OTOOL STREQUAL "${fake_bin}/${fake_host}-otool")
+    message(FATAL_ERROR
+        "Darwin toolchain did not select target otool\n"
+        "expected: ${fake_bin}/${fake_host}-otool\n"
+        "actual: ${CPKT_OTOOL}")
 endif()
 
 foreach(linker_flags

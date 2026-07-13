@@ -369,7 +369,7 @@ static void fuzz_emit_kvfmt(pslog_logger *log, const char *msg,
   }
 }
 
-int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
+int pslog_fuzz_one_input(const unsigned char *data, size_t size) {
   struct fuzz_sink plain_sink;
   struct fuzz_sink color_sink;
   pslog_config config;
@@ -432,4 +432,12 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
   plain_log->destroy(plain_log);
   color_log->destroy(color_log);
   return 0;
+}
+
+int main(void) {
+  unsigned char data[16384];
+  size_t size;
+
+  size = fread(data, 1u, sizeof(data), stdin);
+  return pslog_fuzz_one_input(data, size);
 }

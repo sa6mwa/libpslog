@@ -74,15 +74,9 @@
       "cacheVariables": { "PSLOG_TARGET_ID": "arm64-apple-darwin" }
     },
     {
-      "name": "asan",
-      "inherits": "base",
-      "toolchainFile": "${sourceDir}/cmake/toolchains/linux-llvm-22.cmake",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_FLAGS_DEBUG": "-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer",
-        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
-        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
-      }
+      "name": "valgrind",
+      "inherits": "debug",
+      "cacheVariables": { "PSLOG_BUILD_BENCHMARKS": "OFF" }
     },
     {
       "name": "coverage",
@@ -106,11 +100,11 @@
     {
       "name": "fuzz",
       "inherits": "base",
-      "toolchainFile": "${sourceDir}/cmake/toolchains/linux-llvm-22.cmake",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/linux-aflpp.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "PSLOG_BUILD_FUZZ": "ON",
-        "CMAKE_C_FLAGS_DEBUG": "-O1 -g -fno-omit-frame-pointer"
+        "PSLOG_BUILD_BENCHMARKS": "OFF"
       }
     }
   ],
@@ -118,7 +112,7 @@
     { "name": "debug", "configurePreset": "debug" },
     { "name": "debug-lua", "configurePreset": "debug-lua" },
     { "name": "host", "configurePreset": "host" },
-    { "name": "asan", "configurePreset": "asan" },
+    { "name": "valgrind", "configurePreset": "valgrind" },
     { "name": "coverage", "configurePreset": "coverage" },
     { "name": "coverage-report", "configurePreset": "coverage", "targets": ["coverage-report"] },
     { "name": "format", "configurePreset": "debug", "targets": ["format"] },
@@ -136,9 +130,10 @@
     { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } },
     { "name": "debug-lua", "configurePreset": "debug-lua", "output": { "outputOnFailure": true } },
     { "name": "host", "configurePreset": "host", "output": { "outputOnFailure": true } },
-    { "name": "asan", "configurePreset": "asan", "output": { "outputOnFailure": true } },
+    { "name": "valgrind", "configurePreset": "valgrind", "output": { "outputOnFailure": true } },
     { "name": "coverage", "configurePreset": "coverage", "output": { "outputOnFailure": true } },
     { "name": "profile", "configurePreset": "profile", "output": { "outputOnFailure": true } },
+    { "name": "fuzz", "configurePreset": "fuzz", "output": { "outputOnFailure": true } },
     { "name": "x86_64-linux-gnu-release", "configurePreset": "x86_64-linux-gnu-release", "output": { "outputOnFailure": true } },
     { "name": "x86_64-linux-musl-release", "configurePreset": "x86_64-linux-musl-release", "output": { "outputOnFailure": true } },
     { "name": "aarch64-linux-gnu-release", "configurePreset": "aarch64-linux-gnu-release", "output": { "outputOnFailure": true } },
