@@ -28,4 +28,13 @@ pslog_acquire_verified_archive(
 if(NOT offline_archive STREQUAL first_archive)
     message(FATAL_ERROR "offline cache hit did not reuse the verified archive")
 endif()
+
+file(WRITE "${first_archive}" "corrupt cache entry\n")
+file(WRITE "${source_archive}" "verified fixture archive\n")
+pslog_acquire_verified_archive(
+    COMPONENT fixture URL "file://${source_archive}" SHA256 "${fixture_sha256}" OUTPUT repaired_archive)
+file(SHA256 "${repaired_archive}" repaired_digest)
+if(NOT repaired_digest STREQUAL fixture_sha256)
+    message(FATAL_ERROR "corrupt cache entry was not rejected and repaired")
+endif()
 file(REMOVE_RECURSE "${test_root}")
