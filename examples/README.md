@@ -15,6 +15,10 @@ cd examples
 ./example
 ```
 
+The compiler path above comes from the configured host CMake cache. Do not
+substitute an ambient `cc`, `gcc`, or `clang`: Linux builds and consumer smoke
+tests use the pinned Bootlin collection selected for that target.
+
 Build it in single-header mode:
 
 ```sh

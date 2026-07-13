@@ -18,8 +18,12 @@ runs the full pure C benchmark matrix, then runs the Go-vs-C compare suite in
 For a hard fail-fast performance regression gate:
 
 ```sh
-./bench/run_perf_gate.sh
+make perf-gate
 ```
+
+The Make target supplies the configured Bootlin `CC` and `CXX` to cgo and the
+Lua build. Invoke the script directly only when those variables already name
+the configured host toolchain.
 
 That gate builds the host release target, runs the host CTest preset, builds the
 repo-local Lua rock, then checks:

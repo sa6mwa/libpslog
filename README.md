@@ -162,10 +162,12 @@ cd examples
 ./example
 ```
 
-Binary tarballs ship minimal consumer metadata:
+Binary tarballs ship minimal consumer metadata. Use the compiler selected by the
+active target CMake cache rather than an ambient host compiler:
 
 ```sh
-cc $(pkg-config --cflags pslog) -o example example.c $(pkg-config --libs pslog)
+"$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' ../build/host/CMakeCache.txt)" \
+  $(pkg-config --cflags pslog) -o example example.c $(pkg-config --libs pslog)
 ```
 
 ```cmake
@@ -278,6 +280,7 @@ make benchmarks-c
 make benchmarks-gobencher
 make benchmarks-all
 make lua-test
+make prerelease
 make release
 ```
 
@@ -305,11 +308,15 @@ make fuzz
 
 ## Release Matrix
 
-One-command sweep for the full shipped matrix:
+One-command incremental rehearsal for the full shipped matrix:
 
 ```sh
-./scripts/run_linux_release_matrix.sh
+make release-matrix
 ```
+
+`make prerelease` runs the shared deterministic proof graph without cleaning
+generated state first. `make release` cleans first and then runs that exact
+same proof graph; it is the final local release gate.
 
 That script runs, for every shipped Linux target:
 
@@ -329,7 +336,7 @@ Toolchain expectations:
 
 - Linux presets provision checksum-pinned Bootlin GCC collections through `scripts/cpkt-toolchains.sh`; host compilers and binutils are never selected.
 - Native memory checking uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection.
-- `clang-format` and `clangd` are host development tools only. `.clangd` uses the native debug compile database; cross builds, packages, and releases do not invoke it.
+- `clang-format` and `clangd` are host development tools only. `.clangd` checks project-owned public C headers and native debug sources with `build/debug/compile_commands.json`; it is not a compiler, target-ABI verifier, package check, or release dependency. Cross builds, packages, and releases do not invoke it.
 - The shared toolchain cache is `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}`. External dependency archives use `${CPKT_DEPENDENCY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/deps}`. Both survive `make clean`; only disposable extracted dependency state under the repository’s `.cache/` is removed.
 - Cross test execution requires `qemu-aarch64` and `qemu-arm`; each uses the matching Bootlin sysroot.
 - `arm64-apple-darwin` expects osxcross under `OSXCROSS_ROOT` or `$HOME/.local/cross/osxcross`.
