@@ -8,8 +8,8 @@ ASAN_PRESET := asan
 FUZZ_PRESET := fuzz
 COVERAGE_PRESET := coverage
 RELEASE_BUILD_PRESETS := \
-	linux-gnu-release \
-	linux-musl-release \
+	x86_64-linux-gnu-release \
+	x86_64-linux-musl-release \
 	aarch64-linux-gnu-release \
 	aarch64-linux-musl-release \
 	armhf-linux-gnu-release \
@@ -54,6 +54,7 @@ GO_PRODUCTION_DATASET_SOURCE := bench/bench_production_dataset.c
 GO_PRODUCTION_DATASET_TOOL := bench/gen_go_production_dataset.c
 GO_CKVFMT_WRAPPERS := gobencher/benchmark/cpslog_kvfmt_generated.go
 HOST_GENERATED_VERSION_HEADER := $(CURDIR)/build/host/generated/include/pslog_version.h
+HOST_C_COMPILER = $(shell sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' build/host/CMakeCache.txt | head -n 1)
 
 BENCH_ITERS ?= 200000
 FUZZ_TIME ?= 30
@@ -257,15 +258,15 @@ test-cross: cross-test
 
 package:
 	cmake --preset $(HOST_PRESET)
-	cmake --build --preset package-archive
-	cmake --build --preset package-single-header
-	cmake --build --preset package-source
+	cmake --build build/$(HOST_PRESET) --target package-archive
+	cmake --build build/$(HOST_PRESET) --target package-single-header
+	cmake --build build/$(HOST_PRESET) --target package-source
 	$(MAKE) release-lua-artifacts
-	cmake --build --preset package-checksums
+	cmake --build build/$(HOST_PRESET) --target package-checksums
 
 package-source:
 	cmake --preset $(HOST_PRESET)
-	cmake --build --preset package-source
+	cmake --build build/$(HOST_PRESET) --target package-source
 
 package-source-smoke:
 	cmake --preset $(HOST_PRESET)
@@ -273,23 +274,23 @@ package-source-smoke:
 
 package-single-header:
 	cmake --preset $(HOST_PRESET)
-	cmake --build --preset package-single-header
+	cmake --build build/$(HOST_PRESET) --target package-single-header
 
 package-checksums:
 	cmake --preset $(HOST_PRESET)
-	cmake --build --preset package-checksums
+	cmake --build build/$(HOST_PRESET) --target package-checksums
 
 package-verify:
 	cmake --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(package_archives_test|release_privacy_gate_test)$$' --output-on-failure
 	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -P tests/source_archive_smoke_test.cmake
-	cmake --build --preset package-privacy-gate
+	cmake --build build/$(HOST_PRESET) --target package-privacy-gate
 
 verify-release-archives: package-verify
 
 verify-release-privacy:
 	cmake --preset $(HOST_PRESET)
-	cmake --build --preset package-privacy-gate
+	cmake --build build/$(HOST_PRESET) --target package-privacy-gate
 
 release-matrix:
 	./scripts/run_linux_release_matrix.sh
@@ -357,17 +358,17 @@ $(LUA_ROCKSPEC): $(LUA_ROCK_SOURCES)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_ROCKSPEC)" "git+file://$(CURDIR)"
 
 $(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) build-host
-	flock "$(LUA_ROCK_BUILD_LOCK)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
+	CC="$(HOST_C_COMPILER)" flock "$(LUA_ROCK_BUILD_LOCK)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
 
 lua-test: lua-rock
 	LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}" ./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
-	./lua/scripts/run_interop_embedder_test.sh "$(LUA_LOCAL_LIBDIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)"
+	CC="$(HOST_C_COMPILER)" ./lua/scripts/run_interop_embedder_test.sh "$(LUA_LOCAL_LIBDIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)"
 	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && lua lua/tests/test_pslog.lua
 
 $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATASET_TOOL) $(GO_PRODUCTION_DATASET_SOURCE)
 	@tmp_bin="$$(mktemp "$(CURDIR)/.gen_go_production_dataset.XXXXXX")"; \
 	rm -f "$$tmp_bin"; \
-	cc -std=c99 -O2 -I"$(CURDIR)" -I"$(CURDIR)/include" -I"$(CURDIR)/build/host/generated/include" "$(GO_PRODUCTION_DATASET_TOOL)" "$(GO_PRODUCTION_DATASET_SOURCE)" -o "$$tmp_bin"; \
+	"$(HOST_C_COMPILER)" -std=c99 -O2 -I"$(CURDIR)" -I"$(CURDIR)/include" -I"$(CURDIR)/build/host/generated/include" "$(GO_PRODUCTION_DATASET_TOOL)" "$(GO_PRODUCTION_DATASET_SOURCE)" -o "$$tmp_bin"; \
 	"$$tmp_bin" >"$(GO_PRODUCTION_DATASET)"; \
 	rm -f "$$tmp_bin"
 

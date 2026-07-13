@@ -37,6 +37,18 @@ function(pslog_configure_c_target target)
             -Wextra
             -Wpedantic
             -pedantic-errors
+            -Werror
+        )
+    endif()
+endfunction()
+
+function(pslog_configure_project_warnings target)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(${target} PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -Werror
         )
     endif()
 endfunction()
@@ -136,9 +148,13 @@ add_custom_target(format DEPENDS clang-format)
 option(PSLOG_BUILD_TESTS "Build unit tests" ON)
 option(PSLOG_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(PSLOG_BUILD_FUZZ "Build fuzz targets" OFF)
+option(PSLOG_BUILD_LUA "Enable the Lua facade checks" ON)
 option(PSLOG_BENCHMARK_WITH_LIBLOGGER "Enable optional benchmark-only liblogger comparisons" OFF)
 option(PSLOG_BENCHMARK_WITH_QUILL "Enable optional benchmark-only Quill comparisons" OFF)
 option(PSLOG_ENABLE_COVERAGE "Build test targets with gcov coverage instrumentation" OFF)
+set(PSLOG_DEPENDENCY_MODE "bundled-sdk" CACHE STRING
+    "Dependency resolution mode used by lifecycle presets")
+set_property(CACHE PSLOG_DEPENDENCY_MODE PROPERTY STRINGS bundled-sdk)
 
 if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER OR PSLOG_BENCHMARK_WITH_QUILL)
     include(FetchContent)
@@ -315,10 +331,11 @@ if(PSLOG_BUILD_TESTS)
         target_compile_definitions(pslog_tests PRIVATE _DARWIN_C_SOURCE=1)
     endif()
     target_link_libraries(pslog_tests PRIVATE pslog_test_static jansson)
+    pslog_configure_project_warnings(pslog_tests)
     pslog_enable_coverage_if_requested(pslog_tests)
     add_test(NAME pslog_tests COMMAND pslog_tests)
     pslog_set_test_properties(pslog_tests "unit;local" 30)
-    if(PSLOG_LUA_FOUND)
+    if(PSLOG_BUILD_LUA AND PSLOG_LUA_FOUND)
         add_executable(pslog_lua_interop_tests
             tests/lua_interop_embedder_test.c
             lua/src/pslog_lua.c
@@ -342,6 +359,7 @@ if(PSLOG_BUILD_TESTS)
             pslog_test_static
             ${PSLOG_LUA_LIBRARIES}
         )
+        pslog_configure_project_warnings(pslog_lua_interop_tests)
         pslog_enable_coverage_if_requested(pslog_lua_interop_tests)
         add_test(NAME pslog_lua_interop_tests COMMAND pslog_lua_interop_tests)
         pslog_set_test_properties(pslog_lua_interop_tests "unit;local;lua" 30)
@@ -366,6 +384,7 @@ if(PSLOG_BUILD_TESTS)
         target_compile_definitions(pslog_single_header_tests PRIVATE _DARWIN_C_SOURCE=1)
     endif()
     target_link_libraries(pslog_single_header_tests PRIVATE Threads::Threads jansson)
+    pslog_configure_project_warnings(pslog_single_header_tests)
     add_dependencies(pslog_single_header_tests package-single-header)
     pslog_enable_coverage_if_requested(pslog_single_header_tests)
     add_test(NAME pslog_single_header_tests COMMAND pslog_single_header_tests)
@@ -498,6 +517,7 @@ if(PSLOG_BUILD_BENCHMARKS)
         add_library(pslog_bench_liblogger SHARED bench/bench_liblogger_stub.c)
     endif()
     target_include_directories(pslog_bench_liblogger PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    pslog_configure_project_warnings(pslog_bench_liblogger)
     set_target_properties(pslog_bench_liblogger PROPERTIES
         OUTPUT_NAME pslog_bench_liblogger
         POSITION_INDEPENDENT_CODE ON
@@ -558,6 +578,7 @@ if(PSLOG_BUILD_BENCHMARKS)
         add_library(pslog_bench_quill SHARED bench/bench_quill_stub.c)
     endif()
     target_include_directories(pslog_bench_quill PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    pslog_configure_project_warnings(pslog_bench_quill)
     set_target_properties(pslog_bench_quill PROPERTIES
         OUTPUT_NAME pslog_bench_quill
         POSITION_INDEPENDENT_CODE ON
@@ -569,6 +590,7 @@ if(PSLOG_BUILD_BENCHMARKS)
     )
     target_include_directories(pslog_bench PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(pslog_bench PRIVATE pslog_static)
+    pslog_configure_project_warnings(pslog_bench)
     pslog_enable_coverage_if_requested(pslog_bench)
     if(PSLOG_BENCHMARK_WITH_LIBLOGGER)
         target_link_libraries(pslog_bench PRIVATE pslog_bench_liblogger)
@@ -590,7 +612,15 @@ if(PSLOG_BUILD_FUZZ)
     target_link_options(pslog_fuzz PRIVATE -fsanitize=fuzzer,address)
 endif()
 
-find_program(GCOV_BIN NAMES gcov)
+execute_process(
+    COMMAND "${CMAKE_C_COMPILER}" -print-prog-name=gcov
+    OUTPUT_VARIABLE GCOV_BIN
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT IS_ABSOLUTE "${GCOV_BIN}" OR NOT EXISTS "${GCOV_BIN}")
+    unset(GCOV_BIN)
+endif()
 
 if(PSLOG_BUILD_TESTS AND PSLOG_ENABLE_COVERAGE AND GCOV_BIN)
     add_custom_target(coverage-report
@@ -634,6 +664,8 @@ add_custom_target(package-archive
         -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
         -DPSLOG_STRIP=${CMAKE_STRIP}
+        -DPSLOG_READELF=${CMAKE_READELF}
+        -DPSLOG_OTOOL=${CPKT_OTOOL}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_archive.cmake
     DEPENDS pslog_shared pslog_static
     VERBATIM
@@ -644,6 +676,8 @@ add_custom_target(package-single-header
         -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
         -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
         -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
+        -DPSLOG_READELF=${CMAKE_READELF}
+        -DPSLOG_OTOOL=${CPKT_OTOOL}
         -DPSLOG_PUBLIC_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/pslog.h
         -DPSLOG_PUBLIC_VERSION_HEADER=${PSLOG_GENERATED_VERSION_HEADER}
         -DPSLOG_INTERNAL_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/src/pslog_internal.h

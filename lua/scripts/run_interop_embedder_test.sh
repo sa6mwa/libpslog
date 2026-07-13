@@ -10,7 +10,7 @@ out_dir="${repo_root}/build/lua-interop"
 test_bin="${out_dir}/pslog_lua_interop_tests"
 installed_consumer_src="${out_dir}/installed_rock_consumer.c"
 installed_consumer_bin="${out_dir}/installed_rock_consumer"
-cc_bin="${CC:-cc}"
+cc_bin="${CC:?lua interop embedder test requires the lifecycle-selected CC}"
 cflags="${CFLAGS:-}"
 ldflags="${LDFLAGS:-}"
 

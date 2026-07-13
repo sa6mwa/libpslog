@@ -157,7 +157,7 @@ Build it in normal library mode:
 cmake --preset host
 cmake --build --preset host
 cd examples
-cc -I../build/host/generated/include -I../include \
+"$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
   -o example example.c ../build/host/libpslog.a -pthread
 ./example
 ```
@@ -180,9 +180,9 @@ Build the same example in single-header mode:
 
 ```sh
 cmake --preset host
-cmake --build --preset package-single-header
+cmake --build ../build/host --target package-single-header
 cd examples
-cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
+"$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
   -I../build/host/generated/include \
   -o example example.c -pthread
 ./example
@@ -331,10 +331,9 @@ and packages `arm64-apple-darwin`.
 
 Toolchain expectations:
 
-- `linux-gnu` cross presets expect distro cross compilers such as `aarch64-linux-gnu-gcc` and `arm-linux-gnueabihf-gcc`.
-- `x86_64-linux-musl` expects host `musl-gcc`.
-- `aarch64-linux-musl` and `armhf-linux-musl` expect real musl cross compilers such as `aarch64-linux-musl-gcc` and `arm-linux-musleabihf-gcc`.
-- musl ARM qemu runs expect the musl loader symlink in the target sysroot to resolve within the prefix, for example `ld-musl-aarch64.so.1 -> libc.so`.
+- Linux presets provision checksum-pinned Bootlin GCC collections through `scripts/cpkt-toolchains.sh`; host compilers and binutils are never selected.
+- The shared cache is `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}` and survives `make clean`.
+- Cross test execution requires `qemu-aarch64` and `qemu-arm`; each uses the matching Bootlin sysroot.
 - `arm64-apple-darwin` expects osxcross under `OSXCROSS_ROOT` or `$HOME/.local/cross/osxcross`.
 
 Single-target examples:
@@ -344,7 +343,7 @@ cmake --preset aarch64-linux-gnu-release
 cmake --build --preset aarch64-linux-gnu-release
 ctest --preset aarch64-linux-gnu-release
 
-cmake --build --preset package-archive-aarch64-linux-gnu
+cmake --build build/aarch64-linux-gnu-release --target package-archive
 ```
 
 Each target archive in `dist/` now contains the public headers, the shared
