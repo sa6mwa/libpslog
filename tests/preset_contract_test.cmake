@@ -72,6 +72,10 @@ if(NOT afl_toolchain MATCHES "set\\(PSLOG_BOOTLIN_C_COMPILER_OVERRIDE \"\\$\\{af
    NOT afl_toolchain MATCHES "run_sysroot_binary\\.sh")
     message(FATAL_ERROR "AFL++ wrappers must select before Bootlin toolchain setup and retain its native sysroot executor")
 endif()
+file(READ "${PSLOG_ROOT}/cmake/toolchains/pslog_bootlin.cmake" bootlin_toolchain)
+if(bootlin_toolchain MATCHES "IS_EXECUTABLE")
+    message(FATAL_ERROR "Bootlin toolchain validation must remain compatible with the CMake 3.21 minimum")
+endif()
 file(READ "${PSLOG_ROOT}/lua/scripts/run_interop_embedder_test.sh" lua_interop_runner)
 if(NOT lua_interop_runner MATCHES "run_sysroot_binary\\.sh" OR
    NOT lua_interop_runner MATCHES "--library-path" OR

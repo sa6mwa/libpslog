@@ -101,10 +101,10 @@ function(pslog_configure_bootlin_toolchain target_id)
     else()
         set(selected_cxx_compiler "${bootlin_cxx}")
     endif()
-    if(NOT IS_EXECUTABLE "${selected_c_compiler}" OR
-       NOT IS_EXECUTABLE "${selected_cxx_compiler}")
+    if(NOT EXISTS "${selected_c_compiler}" OR
+       NOT EXISTS "${selected_cxx_compiler}")
         message(FATAL_ERROR
-            "The selected Bootlin compiler drivers are not executable for ${target_id}: "
+            "The selected Bootlin compiler drivers are missing for ${target_id}: "
             "${selected_c_compiler}; ${selected_cxx_compiler}")
     endif()
 
