@@ -234,7 +234,13 @@ gobencher-tests: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPE
 perf-gate: build-host lua-rock
 	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./bench/run_perf_gate.sh
 
-test-all: test valgrind fuzz-smoke cross-test gobencher-tests perf-gate
+test-all:
+	$(TIMED) test $(MAKE) test
+	$(TIMED) valgrind $(MAKE) valgrind
+	$(TIMED) fuzz-smoke $(MAKE) fuzz-smoke
+	$(TIMED) cross-test $(MAKE) cross-test
+	$(TIMED) gobencher-tests $(MAKE) gobencher-tests
+	$(TIMED) perf-gate $(MAKE) perf-gate
 
 valgrind:
 	cmake --preset $(VALGRIND_PRESET)

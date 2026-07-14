@@ -327,7 +327,8 @@ same proof graph; it is the final local release gate.
 proof graph. `make release` writes a tab-separated phase timing report to
 `build/release-timings.tsv`; its matrix entries distinguish configure, build,
 QEMU-backed test, packaging, source smoke, Lua artifacts, checksums, and
-privacy verification.
+privacy verification. It also separates ordinary C tests, Valgrind, AFL++
+smoke, cross tests, Go tests, and the performance gate.
 
 That script runs, for every shipped Linux target:
 

@@ -30,3 +30,10 @@ if(NOT makefile MATCHES "RELEASE_TIMING_FILE := \\$\\(CURDIR\\)/build/release-ti
    NOT makefile MATCHES "TIMED := ./scripts/run_timed\\.sh")
     message(FATAL_ERROR "release must expose the lifecycle timing output through scripts/run_timed.sh")
 endif()
+if(NOT makefile MATCHES "test-all:\n[ \t]*\\$\\(TIMED\\) test \\$\\(MAKE\\) test\n[ \t]*\\$\\(TIMED\\) valgrind \\$\\(MAKE\\) valgrind" OR
+   NOT makefile MATCHES "\\$\\(TIMED\\) fuzz-smoke \\$\\(MAKE\\) fuzz-smoke" OR
+   NOT makefile MATCHES "\\$\\(TIMED\\) cross-test \\$\\(MAKE\\) cross-test" OR
+   NOT makefile MATCHES "\\$\\(TIMED\\) gobencher-tests \\$\\(MAKE\\) gobencher-tests" OR
+   NOT makefile MATCHES "\\$\\(TIMED\\) perf-gate \\$\\(MAKE\\) perf-gate")
+    message(FATAL_ERROR "test-all must expose its serial release timing phases")
+endif()
