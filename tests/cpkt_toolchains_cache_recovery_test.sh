@@ -80,6 +80,13 @@ for tool in clang clang++ ld ar ranlib strip nm otool; do
   chmod +x "$darwin_bin/$darwin_host-$tool"
 done
 unset CPKT_OSXCROSS_HOST
+if OSXCROSS_ROOT="$darwin_root" osxcross_candidate >/dev/null; then
+  printf 'Darwin discovery accepted a toolchain without CMake-required SDK prerequisites\n' >&2
+  exit 1
+fi
+: >"$darwin_bin/$darwin_host-install_name_tool"
+chmod +x "$darwin_bin/$darwin_host-install_name_tool"
+mkdir -p "$darwin_root/SDK/MacOSX15.sdk/usr/include"
 darwin_candidate=$(OSXCROSS_ROOT="$darwin_root" osxcross_candidate)
 [[ "$darwin_candidate" == "osxcross|$darwin_root|$darwin_host" ]] || {
   printf 'Darwin discovery did not accept the installed non-default target prefix: %s\n' "$darwin_candidate" >&2

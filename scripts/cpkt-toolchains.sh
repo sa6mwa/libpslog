@@ -120,6 +120,20 @@ bootlin_ready() {
     existing_compiler_file "$root/bin/$prefix-g++" libgcc.a >/dev/null
 }
 
+osxcross_ready() {
+  local root=$1 prefix=$2 sdk
+  [[ -n "$prefix" ]] &&
+    [[ -x "$root/bin/$prefix-clang" ]] && [[ -x "$root/bin/$prefix-clang++" ]] &&
+    [[ -x "$root/bin/$prefix-ld" ]] && [[ -x "$root/bin/$prefix-ar" ]] &&
+    [[ -x "$root/bin/$prefix-ranlib" ]] && [[ -x "$root/bin/$prefix-install_name_tool" ]] &&
+    [[ -x "$root/bin/$prefix-strip" ]] && [[ -x "$root/bin/$prefix-nm" ]] &&
+    [[ -x "$root/bin/$prefix-otool" ]] || return 1
+  for sdk in "$root"/SDK/MacOSX*.sdk; do
+    [[ -d "$sdk/usr/include" ]] && return 0
+  done
+  return 1
+}
+
 osxcross_candidate() {
   local root=${OSXCROSS_ROOT:-${HOME:-}/.local/cross/osxcross}
   local prefix=${CPKT_OSXCROSS_HOST:-} cc candidate
@@ -130,19 +144,12 @@ osxcross_candidate() {
       [[ -x "$cc" ]] || continue
       candidate=$(basename -- "$cc")
       candidate=${candidate%-clang}
-      if [[ -x "$root/bin/$candidate-clang++" ]] && [[ -x "$root/bin/$candidate-ld" ]] &&
-         [[ -x "$root/bin/$candidate-ar" ]] && [[ -x "$root/bin/$candidate-ranlib" ]] &&
-         [[ -x "$root/bin/$candidate-strip" ]] && [[ -x "$root/bin/$candidate-nm" ]] &&
-         [[ -x "$root/bin/$candidate-otool" ]]; then
+      if osxcross_ready "$root" "$candidate"; then
         prefix=$candidate
       fi
     done
   fi
-  [[ -n "$prefix" ]] || return 1
-  [[ -x "$root/bin/$prefix-clang" ]] && [[ -x "$root/bin/$prefix-clang++" ]] &&
-    [[ -x "$root/bin/$prefix-ld" ]] && [[ -x "$root/bin/$prefix-ar" ]] &&
-    [[ -x "$root/bin/$prefix-ranlib" ]] && [[ -x "$root/bin/$prefix-strip" ]] &&
-    [[ -x "$root/bin/$prefix-nm" ]] && [[ -x "$root/bin/$prefix-otool" ]] || return 1
+  osxcross_ready "$root" "$prefix" || return 1
   printf 'osxcross|%s|%s\n' "$root" "$prefix"
 }
 
