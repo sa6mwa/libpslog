@@ -22,18 +22,19 @@ The primary `*C` comparison path crosses the cgo boundary once per benchmark cas
 
 ## Prerequisite
 
-Build the release library first:
+The root Make targets prepare every required native, Lua, and generated input:
 
 ```sh
-cmake --preset host
-cmake --build --preset host
-make lua-rock
+make gobencher-tests
+# or: make benchmarks-gobencher
 ```
 
 The cgo bridge links against the repo-local installed SDK at
 `../build/lua-sdk/lib/libpslog.a` and uses its public headers from
 `../build/lua-sdk/include`.
 The embedded-Lua compare path loads the shipped rock from `../build/luarocks`.
+Do not invoke raw Go commands until one of those root targets has prepared the
+selected Bootlin compiler and generated benchmark inputs.
 
 ## Useful Commands
 

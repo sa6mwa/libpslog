@@ -41,8 +41,10 @@ All targets are wired for:
 - runtime package generation
 - dev package generation
 
-For Linux ARM targets, the test presets run under qemu. The Darwin target is a
-build-and-package target for osxcross.
+For Linux ARM targets, the test presets run under qemu. These are mandatory
+release routes: `make release-matrix` and `make release` fail if `qemu-aarch64`
+or `qemu-arm` is unavailable. The Darwin target is a build-and-package target
+when the local osxcross toolchain is available.
 
 ## API Overview
 
@@ -162,15 +164,17 @@ cd examples
 ./example
 ```
 
-Binary tarballs ship minimal consumer metadata. Use the compiler selected by the
-active target CMake cache rather than an ambient host compiler:
+For an extracted binary SDK, point pkg-config at that SDK and use the compiler
+selected for the matching target rather than an ambient host compiler:
 
 ```sh
-"$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" \
-  $(pkg-config --cflags pslog) -o example example.c $(pkg-config --libs pslog)
+sdk=/path/to/libpslog-<version>-<target>
+export PKG_CONFIG_PATH="$sdk/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+"$CC" $(pkg-config --cflags pslog) -o example example.c $(pkg-config --libs pslog)
 ```
 
 ```cmake
+set(CMAKE_PREFIX_PATH "/path/to/libpslog-<version>-<target>")
 find_package(pslog CONFIG REQUIRED)
 target_link_libraries(example PRIVATE pslog::pslog)
 ```
@@ -251,7 +255,7 @@ Run the Lua examples from the repository root:
 
 ```sh
 make lua-rock
-eval "$(luarocks path --tree build/luarocks)"
+eval "$(make lua-env)"
 lua lua/examples/example.lua
 lua lua/examples/basic.lua
 lua lua/examples/from_env.lua
@@ -267,8 +271,9 @@ Example entry points live under [`lua/examples/`](lua/examples/):
 
 The full Lua API reference lives in [`lua/README.md`](lua/README.md).
 
-`make release` now also emits:
+`make release` also emits:
 
+- `dist/lua-pslog-<version>.tar.gz`
 - `dist/lua-pslog-<version>-1.rockspec`
 - `dist/lua-pslog-<version>-1.src.rock`
 
@@ -330,6 +335,12 @@ QEMU-backed test, packaging, source smoke, Lua artifacts, checksums, and
 privacy verification. It also separates ordinary C tests, Valgrind, AFL++
 smoke, cross tests, Go tests, and the performance gate.
 
+Inspect the latest completed report with:
+
+```sh
+column -t -s $'\t' build/release-timings.tsv
+```
+
 That script runs, for every shipped Linux target:
 
 - `cmake --preset ...`
@@ -348,7 +359,7 @@ Toolchain expectations:
 
 - Linux presets provision checksum-pinned Bootlin GCC collections through `scripts/cpkt-toolchains.sh`; host compilers and binutils are never selected.
 - Native memory checking uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection.
-- `clang-format` and `clangd` are host development tools only. `.clangd` checks project-owned public C headers and native debug sources with `build/debug/compile_commands.json`; it is not a compiler, target-ABI verifier, package check, or release dependency. Cross builds, packages, and releases do not invoke it.
+- `clang-format` and `clangd` are host development tools only. `make clangd` checks the native debug translation unit with `build/debug/compile_commands.json`, including its public-header surface. Public declarations use Doxygen comments so hover documentation remains useful in clangd. clangd is not a compiler, target-ABI verifier, package check, or release dependency; cross builds, packages, and releases do not invoke it.
 - The shared toolchain cache is `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}`. External dependency archives use `${CPKT_DEPENDENCY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/deps}`. Both survive `make clean`; only disposable extracted dependency state under the repository’s `.cache/` is removed.
 - Cross test execution requires `qemu-aarch64` and `qemu-arm`; each uses the matching Bootlin sysroot.
 - `arm64-apple-darwin` expects osxcross under `OSXCROSS_ROOT` or `$HOME/.local/cross/osxcross`.

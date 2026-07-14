@@ -540,6 +540,16 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME public_api_docs_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/public_api_docs_test.cmake
+    )
+    set_tests_properties(public_api_docs_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME example_integration_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
