@@ -19,9 +19,29 @@ export CPKT_TOOLCHAIN_CACHE="$fixture_root/cache"
 bootlin_values() {
   printf 'test|fixture|%s|fake|sysroot|%s\n' "$expected_sha" "$CPKT_TOOLCHAIN_CACHE/roots/fixture"
 }
-bootlin_ready() { [[ -f "$1/.ready" ]]; }
+lock_held=0
+ready_checks=0
+reject_lock=0
+allow_unlocked_ready=0
+flock() {
+  [[ "$reject_lock" -eq 0 ]] || { printf 'ready toolchain unexpectedly acquired a cache lock\n' >&2; return 1; }
+  if [[ "${1:-}" == '-u' ]]; then
+    lock_held=0
+  else
+    lock_held=1
+  fi
+}
+bootlin_ready() {
+  ready_checks=$((ready_checks + 1))
+  if [[ "$ready_checks" -gt 1 && "$lock_held" -ne 1 && "$allow_unlocked_ready" -ne 1 ]]; then
+    printf 'toolchain readiness check ran outside its cache lock\n' >&2
+    return 1
+  fi
+  [[ -f "$1/.ready" ]]
+}
 download_calls=0
 download_file() {
+  [[ "$lock_held" -eq 1 ]] || { printf 'toolchain download ran outside its cache lock\n' >&2; return 1; }
   download_calls=$((download_calls + 1))
   cp "$archive_source" "$2"
 }
@@ -39,3 +59,14 @@ install_bootlin fixture
   printf 'reacquired toolchain archive was not extracted\n' >&2
   exit 1
 }
+[[ -f "$CPKT_TOOLCHAIN_CACHE/locks/fixture.lock" ]] || {
+  printf 'toolchain cache lock was not created\n' >&2
+  exit 1
+}
+[[ "$lock_held" -eq 0 ]] || {
+  printf 'toolchain cache lock was not released after installation\n' >&2
+  exit 1
+}
+reject_lock=1
+allow_unlocked_ready=1
+install_bootlin fixture

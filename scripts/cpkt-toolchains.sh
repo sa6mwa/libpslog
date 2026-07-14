@@ -131,13 +131,22 @@ osxcross_candidate() {
 }
 
 install_bootlin() {
-  local target=$1 values arch name sha256 prefix sysroot_rel root archive_dir archive tmp extract actual
+  local target=$1 values arch name sha256 prefix sysroot_rel root archive_dir archive lock_path lock_fd tmp extract actual
   values=$(bootlin_values "$target")
   IFS='|' read -r arch name sha256 prefix sysroot_rel root <<<"$values"
   if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then return; fi
   archive_dir="$(cache_root)/archives"
   archive="$archive_dir/$name.tar.xz"
-  mkdir -p "$archive_dir" "$(cache_root)/roots"
+  lock_path="$(cache_root)/locks/$name.lock"
+  command -v flock >/dev/null 2>&1 || die 'flock is required to provision shared Bootlin toolchains safely'
+  mkdir -p "$archive_dir" "$(cache_root)/roots" "$(dirname "$lock_path")"
+  exec {lock_fd}>"$lock_path"
+  flock "$lock_fd"
+  if bootlin_ready "$root" "$prefix" "$root/$sysroot_rel"; then
+    flock -u "$lock_fd"
+    exec {lock_fd}>&-
+    return
+  fi
   if [[ -f "$archive" ]]; then
     actual=$(sha256_file "$archive")
     if [[ "$actual" != "$sha256" ]]; then
@@ -164,6 +173,8 @@ install_bootlin() {
   rm -rf "$extract"
   trap - EXIT HUP INT TERM
   bootlin_ready "$root" "$prefix" "$root/$sysroot_rel" || die "incomplete extracted Bootlin toolchain: $root"
+  flock -u "$lock_fd"
+  exec {lock_fd}>&-
 }
 
 print_bootlin_target() {
