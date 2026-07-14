@@ -1,0 +1,12 @@
+# Files intentionally shipped in the standalone Lua source package.
+LICENSE
+include/pslog.h
+include/pslog_lua.h
+lua/README.md
+lua/RELEASE_MANIFEST.in
+lua/lua-pslog.rockspec.in
+lua/pslog/init.lua
+lua/scripts/render_release_rockspec.sh
+lua/scripts/release_version.sh
+lua/scripts/stage_release_sources.sh
+lua/src/pslog_lua.c

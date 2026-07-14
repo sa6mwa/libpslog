@@ -37,6 +37,21 @@ endif()
 
 file(MAKE_DIRECTORY "${clean_test_root}/build")
 file(MAKE_DIRECTORY "${clean_test_root}/dist")
+execute_process(
+    COMMAND env -u HOME "${PSLOG_ROOT}/scripts/clean.sh" --root "${clean_test_root}"
+    RESULT_VARIABLE home_unset_result
+    ERROR_VARIABLE home_unset_error
+)
+if(NOT home_unset_result EQUAL 0)
+    message(FATAL_ERROR
+        "full clean failed with HOME unset: ${home_unset_error}")
+endif()
+if(EXISTS "${clean_test_root}/build" OR EXISTS "${clean_test_root}/dist")
+    message(FATAL_ERROR "full clean with HOME unset did not remove generated state")
+endif()
+
+file(MAKE_DIRECTORY "${clean_test_root}/build")
+file(MAKE_DIRECTORY "${clean_test_root}/dist")
 file(WRITE "${clean_test_root}/build/recreated.txt" "build\n")
 file(WRITE "${clean_test_root}/dist/recreated.txt" "dist\n")
 

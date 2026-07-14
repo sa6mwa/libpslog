@@ -28,6 +28,20 @@ LUA_RELEASE_ROCKSPEC := $(LUA_DIST_DIR)/lua-pslog-$(LUA_RELEASE_VERSION)-1.rocks
 LUA_RELEASE_PACK_DIR := $(LUA_DIST_DIR)/.lua-pack
 LUA_RELEASE_STAGE_NAME := lua-pslog-$(LUA_RELEASE_VERSION)
 LUA_RELEASE_STAGE_DIR := $(LUA_RELEASE_PACK_DIR)/$(LUA_RELEASE_STAGE_NAME)
+LUA_RELEASE_MANIFEST := lua/RELEASE_MANIFEST.in
+LUA_RELEASE_STAGE_SCRIPT := lua/scripts/stage_release_sources.sh
+LUA_RELEASE_STAGE_INPUTS := \
+	$(LUA_RELEASE_MANIFEST) \
+	$(LUA_RELEASE_STAGE_SCRIPT) \
+	LICENSE \
+	include/pslog.h \
+	include/pslog_lua.h \
+	lua/README.md \
+	lua/lua-pslog.rockspec.in \
+	lua/pslog/init.lua \
+	lua/scripts/render_release_rockspec.sh \
+	lua/scripts/release_version.sh \
+	lua/src/pslog_lua.c
 LUA_RELEASE_PACK_SOURCE_TAR := $(LUA_RELEASE_PACK_DIR)/$(LUA_RELEASE_STAGE_NAME).tar
 LUA_RELEASE_PACK_SOURCE_TARBALL := $(LUA_RELEASE_PACK_SOURCE_TAR).gz
 LUA_RELEASE_SOURCE_TARBALL := $(LUA_DIST_DIR)/$(LUA_RELEASE_STAGE_NAME).tar.gz
@@ -359,13 +373,9 @@ $(LUA_RELEASE_PACK_DIR):
 $(LUA_DIST_DIR):
 	mkdir -p "$(LUA_DIST_DIR)"
 
-$(LUA_RELEASE_STAGE_DIR): Makefile .git/index | $(LUA_RELEASE_PACK_DIR)
+$(LUA_RELEASE_STAGE_DIR): $(LUA_RELEASE_STAGE_INPUTS) $(LUA_SDK_STAMP) | $(LUA_RELEASE_PACK_DIR)
 	rm -rf "$(LUA_RELEASE_STAGE_DIR)"
-	mkdir -p "$(LUA_RELEASE_STAGE_DIR)"
-	git archive --format=tar --worktree-attributes HEAD | tar -xf - -C "$(LUA_RELEASE_STAGE_DIR)"
-	rm -f "$(LUA_RELEASE_STAGE_DIR)/REVIEW.md"
-	printf '%s\n' "$(LUA_RELEASE_VERSION)" >"$(LUA_RELEASE_STAGE_DIR)/VERSION"
-	{ cd "$(LUA_RELEASE_STAGE_DIR)" && find . -type f ! -name VERSION ! -name RELEASE_MANIFEST | sed 's#^\./##' | grep -v '^REVIEW\.md$$' | LC_ALL=C sort; printf '%s\n' VERSION RELEASE_MANIFEST; } >"$(LUA_RELEASE_STAGE_DIR)/RELEASE_MANIFEST"
+	bash "$(LUA_RELEASE_STAGE_SCRIPT)" "$(CURDIR)" "$(LUA_RELEASE_STAGE_DIR)" "$(LUA_RELEASE_VERSION)" "$(LUA_SDK_INCLUDE_DIR)/pslog_version.h"
 
 $(LUA_RELEASE_ROCKSPEC): $(LUA_ROCK_SOURCES) Makefile | $(LUA_DIST_DIR)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_RELEASE_ROCKSPEC)"

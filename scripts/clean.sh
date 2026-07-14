@@ -41,7 +41,8 @@ else
     root_dir="$(CDPATH= cd -- "$root_dir" && pwd)"
 fi
 
-if [ "$root_dir" = "/" ] || [ "$root_dir" = "$HOME" ] || [ "$root_dir" = "$(dirname "$repo_root")" ]; then
+home_dir="${HOME:-}"
+if [ "$root_dir" = "/" ] || { [ -n "$home_dir" ] && [ "$root_dir" = "$home_dir" ]; } || [ "$root_dir" = "$(dirname "$repo_root")" ]; then
     printf 'clean.sh: refusing unsafe cleanup root: %s\n' "$root_dir" >&2
     exit 1
 fi

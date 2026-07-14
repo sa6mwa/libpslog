@@ -439,6 +439,19 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    if(PSLOG_BUILD_LUA)
+        add_test(NAME lua_release_artifacts_test
+            COMMAND ${CMAKE_COMMAND}
+                -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+                -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_release_artifacts_test.cmake
+        )
+        set_tests_properties(lua_release_artifacts_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;packaging;smoke;lua"
+            TIMEOUT 90
+        )
+    endif()
     add_test(NAME c_only_configure_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
