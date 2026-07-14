@@ -70,3 +70,18 @@ install_bootlin fixture
 reject_lock=1
 allow_unlocked_ready=1
 install_bootlin fixture
+
+darwin_root="$fixture_root/osxcross"
+darwin_bin="$darwin_root/bin"
+darwin_host=arm64-apple-darwin24
+mkdir -p "$darwin_bin"
+for tool in clang clang++ ld ar ranlib strip nm otool; do
+  : >"$darwin_bin/$darwin_host-$tool"
+  chmod +x "$darwin_bin/$darwin_host-$tool"
+done
+unset CPKT_OSXCROSS_HOST
+darwin_candidate=$(OSXCROSS_ROOT="$darwin_root" osxcross_candidate)
+[[ "$darwin_candidate" == "osxcross|$darwin_root|$darwin_host" ]] || {
+  printf 'Darwin discovery did not accept the installed non-default target prefix: %s\n' "$darwin_candidate" >&2
+  exit 1
+}

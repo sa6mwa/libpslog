@@ -122,7 +122,23 @@ bootlin_ready() {
 
 osxcross_candidate() {
   local root=${OSXCROSS_ROOT:-${HOME:-}/.local/cross/osxcross}
-  local prefix=${CPKT_OSXCROSS_HOST:-arm64-apple-darwin25}
+  local prefix=${CPKT_OSXCROSS_HOST:-} cc candidate
+  if [[ -z "$prefix" ]]; then
+    # Keep Darwin discovery consistent with the CMake toolchain: accept any
+    # installed arm64 Darwin target and prefer the lexically newest SDK host.
+    for cc in "$root/bin"/arm64-apple-darwin*-clang; do
+      [[ -x "$cc" ]] || continue
+      candidate=$(basename -- "$cc")
+      candidate=${candidate%-clang}
+      if [[ -x "$root/bin/$candidate-clang++" ]] && [[ -x "$root/bin/$candidate-ld" ]] &&
+         [[ -x "$root/bin/$candidate-ar" ]] && [[ -x "$root/bin/$candidate-ranlib" ]] &&
+         [[ -x "$root/bin/$candidate-strip" ]] && [[ -x "$root/bin/$candidate-nm" ]] &&
+         [[ -x "$root/bin/$candidate-otool" ]]; then
+        prefix=$candidate
+      fi
+    done
+  fi
+  [[ -n "$prefix" ]] || return 1
   [[ -x "$root/bin/$prefix-clang" ]] && [[ -x "$root/bin/$prefix-clang++" ]] &&
     [[ -x "$root/bin/$prefix-ld" ]] && [[ -x "$root/bin/$prefix-ar" ]] &&
     [[ -x "$root/bin/$prefix-ranlib" ]] && [[ -x "$root/bin/$prefix-strip" ]] &&

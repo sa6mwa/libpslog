@@ -519,6 +519,15 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME release_matrix_luarocks_override_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_matrix_luarocks_override_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(release_matrix_luarocks_override_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME cpkt_aflpp_cache_lock_test
         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cpkt_aflpp_cache_lock_test.sh
             ${CMAKE_CURRENT_SOURCE_DIR}

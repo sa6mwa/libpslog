@@ -87,6 +87,12 @@ function(pslog_stage_dependency_archive)
     string(TOLOWER "${ARG_SHA256}" digest)
     set(stage_root "${CMAKE_SOURCE_DIR}/.cache/deps/${ARG_COMPONENT}-${digest}")
     set(stamp "${stage_root}/.pslog-archive-sha256")
+    # The staged source directory is shared by all build presets.  Keep the
+    # lock through validation and extraction so a concurrent configure cannot
+    # remove a tree another configure has just started to consume.
+    set(stage_lock_path "${CMAKE_SOURCE_DIR}/.cache/deps/locks/${ARG_COMPONENT}-${digest}.lock")
+    file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/.cache/deps/locks")
+    file(LOCK "${stage_lock_path}" GUARD FUNCTION TIMEOUT 120)
     if(NOT EXISTS "${stamp}" OR NOT EXISTS "${stage_root}/CMakeLists.txt")
         file(REMOVE_RECURSE "${stage_root}")
         file(MAKE_DIRECTORY "${stage_root}")

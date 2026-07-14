@@ -42,7 +42,8 @@ run_build_only_target() {
 require_command cmake
 require_command ctest
 require_command make
-require_command luarocks
+lua_rocks="${LUA_ROCKS:-luarocks}"
+require_command "$lua_rocks"
 require_command qemu-aarch64
 require_command qemu-arm
 
@@ -76,7 +77,7 @@ fi
 "$repo_root/scripts/run_timed.sh" release-matrix:single-header cmake --build build/host --target package-single-header
 "$repo_root/scripts/run_timed.sh" release-matrix:source-archive cmake --build build/host --target package-source
 "$repo_root/scripts/run_timed.sh" release-matrix:source-smoke cmake -DPSLOG_ROOT="$repo_root" -DPSLOG_BINARY_DIR="$repo_root/build/host" -DPSLOG_VERSION="$(./lua/scripts/release_version.sh)" -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
-"$repo_root/scripts/run_timed.sh" release-matrix:lua-artifacts make release-lua-artifacts
+"$repo_root/scripts/run_timed.sh" release-matrix:lua-artifacts env LUA_ROCKS="$lua_rocks" make release-lua-artifacts
 "$repo_root/scripts/run_timed.sh" release-matrix:checksums cmake --build build/host --target package-checksums
 if [ -n "$darwin_toolchain" ]; then
     "$repo_root/scripts/run_timed.sh" release-matrix:privacy ./scripts/verify_release_privacy.sh --build-dir build/host --target-id x86_64-linux-gnu --darwin-build-dir build/arm64-apple-darwin-release

@@ -26,6 +26,10 @@ endif()
 if(NOT dependency_helper MATCHES "file\\(RENAME[ \\t]+\"\\$\\{temp_path\\}\"[ \\t]+\"\\$\\{archive_path\\}\"")
     message(FATAL_ERROR "dependency cache helper does not atomically publish verified archives")
 endif()
+if(NOT dependency_helper MATCHES "set\\(stage_lock_path[ \\t]+\"\\$\\{CMAKE_SOURCE_DIR\\}/\\.cache/deps/locks/" OR
+   NOT dependency_helper MATCHES "file\\(LOCK[ \\t]+\"\\$\\{stage_lock_path\\}\"[ \\t]+GUARD[ \\t]+FUNCTION")
+    message(FATAL_ERROR "dependency staging does not hold a per-stage lock through extraction")
+endif()
 pslog_acquire_verified_archive(
     COMPONENT fixture URL "file://${source_archive}" SHA256 "${fixture_sha256}" OUTPUT first_archive)
 if(NOT EXISTS "${first_archive}")
