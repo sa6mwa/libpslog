@@ -32,7 +32,8 @@ if(dependency_helper MATCHES "EXPECTED_HASH" OR
     message(FATAL_ERROR "dependency downloads must retry and explicitly verify temporary archives before publication")
 endif()
 if(NOT dependency_helper MATCHES "set\\(stage_lock_path[ \\t]+\"\\$\\{CMAKE_SOURCE_DIR\\}/\\.cache/deps/locks/" OR
-   NOT dependency_helper MATCHES "file\\(LOCK[ \\t]+\"\\$\\{stage_lock_path\\}\"[ \\t]+GUARD[ \\t]+FUNCTION")
+   NOT dependency_helper MATCHES "file\\(LOCK[ \\t]+\"\\$\\{stage_lock_path\\}\"[ \\t]+GUARD[ \\t]+FUNCTION" OR
+   NOT dependency_helper MATCHES "file\\(SHA256[ \\t]+\"\\$\\{ARG_ARCHIVE\\}\"[ \\t]+staged_archive_digest")
     message(FATAL_ERROR "dependency staging does not hold a per-stage lock through extraction")
 endif()
 pslog_acquire_verified_archive(
@@ -59,5 +60,24 @@ pslog_acquire_verified_archive(
 file(SHA256 "${repaired_archive}" repaired_digest)
 if(NOT repaired_digest STREQUAL fixture_sha256)
     message(FATAL_ERROR "corrupt cache entry was not rejected and repaired")
+endif()
+
+set(stage_failure_script "${test_root}/stage-failure.cmake")
+file(WRITE "${stage_failure_script}"
+"set(CMAKE_SOURCE_DIR \"${test_root}/stage-project\")\n"
+"include(\"${PSLOG_ROOT}/cmake/pslog_dependencies.cmake\")\n"
+"pslog_stage_dependency_archive(COMPONENT fixture ARCHIVE \"${repaired_archive}\" SHA256 \"0000000000000000000000000000000000000000000000000000000000000000\" OUTPUT staged)\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -P "${stage_failure_script}"
+    RESULT_VARIABLE stage_failure_result
+    OUTPUT_VARIABLE stage_failure_output
+    ERROR_VARIABLE stage_failure_error
+)
+if(stage_failure_result EQUAL 0 OR
+   NOT stage_failure_error MATCHES "dependency archive checksum mismatch before staging")
+    message(FATAL_ERROR
+        "dependency staging accepted a mismatched archive\n"
+        "stdout:\n${stage_failure_output}\n"
+        "stderr:\n${stage_failure_error}")
 endif()
 file(REMOVE_RECURSE "${test_root}")
