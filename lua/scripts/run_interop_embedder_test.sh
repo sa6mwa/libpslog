@@ -26,29 +26,18 @@ if [ -z "${cc_bin}" ] || [ ! -x "${cc_bin}" ]; then
 fi
 cflags="${CFLAGS:-}"
 ldflags="${LDFLAGS:-}"
+lua_stage_dir="${repo_root}/build/lua-host"
+lua_include_dir="${lua_stage_dir}/include"
+lua_lib_dir="${lua_stage_dir}/lib"
 
 mkdir -p "${out_dir}"
 
-lua_cflags=""
-lua_libs=""
-if command -v pkg-config >/dev/null 2>&1; then
-    if pkg-config --exists lua5.5; then
-        lua_cflags=$(pkg-config --cflags lua5.5)
-        lua_libs=$(pkg-config --libs lua5.5)
-    fi
-fi
-
-if [ -z "${lua_cflags}" ] && [ -f /usr/local/include/lua.h ]; then
-    lua_cflags="-I/usr/local/include"
-fi
-if [ -z "${lua_libs}" ] && [ -f /usr/local/lib/liblua.a ]; then
-    lua_libs="/usr/local/lib/liblua.a -lm -ldl"
-fi
-
-if [ -z "${lua_cflags}" ] || [ -z "${lua_libs}" ]; then
-    printf 'lua interop embedder test: missing Lua C headers or library\n' >&2
+if [ ! -f "${lua_include_dir}/lua.h" ] || [ ! -f "${lua_lib_dir}/liblua.a" ]; then
+    printf 'lua interop embedder test: missing staged Lua 5.5 C development files; run make lua-rock first\n' >&2
     exit 1
 fi
+lua_cflags="-I${lua_include_dir}"
+lua_libs="-L${lua_lib_dir} -llua -lm -ldl"
 
 "${cc_bin}" -std=c99 -Wall -Wextra -Werror ${cflags} \
     -D_POSIX_C_SOURCE=200809L \

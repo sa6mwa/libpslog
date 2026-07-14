@@ -37,6 +37,12 @@ LUA_ROCK_TREE := build/luarocks
 LUA_ROCKSPEC := $(LUA_ROCK_TREE)/lua-pslog-$(LUA_RELEASE_VERSION)-1.rockspec
 LUA_ROCK_STAMP := $(LUA_ROCK_TREE)/.installed.stamp
 LUA_ROCK_BUILD_LOCK := $(LUA_ROCK_TREE)/.build.lock
+LUA_HOST_INCLUDE_DIR := $(shell luarocks config variables.LUA_INCDIR)
+LUA_HOST_LIB_DIR := $(shell luarocks config variables.LUA_LIBDIR)
+LUA_STAGED_ROOT := build/lua-host
+LUA_STAGED_INCLUDE_DIR := $(LUA_STAGED_ROOT)/include
+LUA_STAGED_LIB_DIR := $(LUA_STAGED_ROOT)/lib
+LUA_STAGED_LUA_DEPS := $(LUA_STAGED_ROOT)/.staged.stamp
 LUA_LOCAL_LIBDIR := $(CURDIR)/build/host
 LUA_ROCK_BUILD_BYPRODUCTS := \
 	$(CURDIR)/pslog \
@@ -383,8 +389,19 @@ $(LUA_ROCKSPEC): $(LUA_ROCK_SOURCES)
 	mkdir -p "$(LUA_ROCK_TREE)"
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_ROCKSPEC)" "git+file://$(CURDIR)"
 
-$(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) build-host
-	flock "$(LUA_ROCK_BUILD_LOCK)" env CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
+$(LUA_STAGED_LUA_DEPS):
+	@test -n "$(LUA_HOST_INCLUDE_DIR)" || { echo 'Lua 5.5 development headers are required through LuaRocks'; exit 1; }
+	@test -n "$(LUA_HOST_LIB_DIR)" || { echo 'Lua 5.5 development library is required through LuaRocks'; exit 1; }
+	test -f "$(LUA_HOST_INCLUDE_DIR)/lua.h" || { echo "missing Lua 5.5 header: $(LUA_HOST_INCLUDE_DIR)/lua.h"; exit 1; }
+	test -f "$(LUA_HOST_LIB_DIR)/liblua.a" || { echo "missing Lua 5.5 library: $(LUA_HOST_LIB_DIR)/liblua.a"; exit 1; }
+	rm -rf "$(LUA_STAGED_ROOT)"
+	mkdir -p "$(LUA_STAGED_INCLUDE_DIR)" "$(LUA_STAGED_LIB_DIR)"
+	cp -a "$(LUA_HOST_INCLUDE_DIR)/." "$(LUA_STAGED_INCLUDE_DIR)/"
+	cp "$(LUA_HOST_LIB_DIR)/liblua.a" "$(LUA_STAGED_LIB_DIR)/"
+	touch "$@"
+
+$(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) $(LUA_STAGED_LUA_DEPS) build-host
+	flock "$(LUA_ROCK_BUILD_LOCK)" env CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LUA_INCDIR="$(CURDIR)/$(LUA_STAGED_INCLUDE_DIR)" LIBPSLOG_INCDIR="$(CURDIR)/include" LIBPSLOG_LIBDIR="$(CURDIR)/build/host"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
 
 lua-test: lua-rock
 	LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}" ./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
