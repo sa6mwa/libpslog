@@ -3,6 +3,8 @@
 
 function(pslog_configure_bootlin_toolchain target_id)
     set(resolver "${CMAKE_CURRENT_LIST_DIR}/../../scripts/cpkt-toolchains.sh")
+    set(selected_c_compiler "")
+    set(selected_cxx_compiler "")
     if(NOT EXISTS "${resolver}")
         message(FATAL_ERROR "missing lifecycle toolchain resolver: ${resolver}")
     endif()
@@ -87,8 +89,27 @@ function(pslog_configure_bootlin_toolchain target_id)
             "${bootlin_reported_libc_real} is not below ${bootlin_sysroot_real}")
     endif()
 
-    set(CMAKE_C_COMPILER "${bootlin_cc}" CACHE FILEPATH "" FORCE)
-    set(CMAKE_CXX_COMPILER "${bootlin_cxx}" CACHE FILEPATH "" FORCE)
+    if(DEFINED PSLOG_BOOTLIN_C_COMPILER_OVERRIDE AND
+       NOT PSLOG_BOOTLIN_C_COMPILER_OVERRIDE STREQUAL "")
+        set(selected_c_compiler "${PSLOG_BOOTLIN_C_COMPILER_OVERRIDE}")
+    else()
+        set(selected_c_compiler "${bootlin_cc}")
+    endif()
+    if(DEFINED PSLOG_BOOTLIN_CXX_COMPILER_OVERRIDE AND
+       NOT PSLOG_BOOTLIN_CXX_COMPILER_OVERRIDE STREQUAL "")
+        set(selected_cxx_compiler "${PSLOG_BOOTLIN_CXX_COMPILER_OVERRIDE}")
+    else()
+        set(selected_cxx_compiler "${bootlin_cxx}")
+    endif()
+    if(NOT IS_EXECUTABLE "${selected_c_compiler}" OR
+       NOT IS_EXECUTABLE "${selected_cxx_compiler}")
+        message(FATAL_ERROR
+            "The selected Bootlin compiler drivers are not executable for ${target_id}: "
+            "${selected_c_compiler}; ${selected_cxx_compiler}")
+    endif()
+
+    set(CMAKE_C_COMPILER "${selected_c_compiler}" CACHE FILEPATH "" FORCE)
+    set(CMAKE_CXX_COMPILER "${selected_cxx_compiler}" CACHE FILEPATH "" FORCE)
     set(CMAKE_C_COMPILER_TARGET "${bootlin_target_triple}" CACHE STRING "" FORCE)
     set(CMAKE_CXX_COMPILER_TARGET "${bootlin_target_triple}" CACHE STRING "" FORCE)
     set(CMAKE_LINKER "${bootlin_ld}" CACHE FILEPATH "" FORCE)

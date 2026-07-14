@@ -66,9 +66,11 @@ if(NOT cmake_lists MATCHES "add_executable\\(pslog_clangd_public_consumer EXCLUD
     message(FATAL_ERROR "clangd public consumer is missing its exact public CMake compilation target")
 endif()
 file(READ "${PSLOG_ROOT}/cmake/toolchains/linux-aflpp.cmake" afl_toolchain)
-if(NOT afl_toolchain MATCHES "set\\(CMAKE_SYSROOT \"\\$\\{PSLOG_BOOTLIN_SYSROOT\\}\" CACHE PATH" OR
-   NOT afl_toolchain MATCHES "set\\(CMAKE_FIND_ROOT_PATH \"\\$\\{PSLOG_BOOTLIN_SYSROOT\\}\" \"\\$\\{PSLOG_BOOTLIN_ROOT\\}\"")
-    message(FATAL_ERROR "AFL++ compiler wrappers must retain the selected Bootlin sysroot and find roots")
+if(NOT afl_toolchain MATCHES "set\\(PSLOG_BOOTLIN_C_COMPILER_OVERRIDE \"\\$\\{afl_cc\\}\"\\)" OR
+   NOT afl_toolchain MATCHES "pslog_configure_bootlin_toolchain\\(\"x86_64-linux-gnu\"\\)" OR
+   NOT afl_toolchain MATCHES "PSLOG_TEST_EXECUTOR" OR
+   NOT afl_toolchain MATCHES "run_sysroot_binary\\.sh")
+    message(FATAL_ERROR "AFL++ wrappers must select before Bootlin toolchain setup and retain its native sysroot executor")
 endif()
 file(READ "${PSLOG_ROOT}/lua/scripts/run_interop_embedder_test.sh" lua_interop_runner)
 if(NOT lua_interop_runner MATCHES "run_sysroot_binary\\.sh" OR
