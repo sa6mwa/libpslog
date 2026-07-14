@@ -122,6 +122,7 @@ file(WRITE "${provenance_root}/lua/RELEASE_MANIFEST.in"
     "tracked.txt\n")
 file(WRITE "${provenance_root}/lua/README.md" "committed Lua documentation\n")
 file(WRITE "${provenance_root}/tracked.txt" "committed source\n")
+file(WRITE "${provenance_root}/other.txt" "committed but not released source\n")
 file(WRITE "${provenance_root}/pslog_version.h" "#define PSLOG_VERSION_STRING \"9.9.9\"\n")
 execute_process(
     COMMAND git init --quiet
@@ -142,6 +143,9 @@ if(NOT fixture_git_init_result EQUAL 0 OR NOT fixture_git_email_result EQUAL 0
     message(FATAL_ERROR "failed to create the Lua release provenance fixture")
 endif()
 file(WRITE "${provenance_root}/tracked.txt" "uncommitted source\n")
+file(WRITE "${provenance_root}/lua/RELEASE_MANIFEST.in"
+    "lua/README.md\n"
+    "other.txt\n")
 execute_process(
     COMMAND bash "${PSLOG_ROOT}/lua/scripts/stage_release_sources.sh"
         "${provenance_root}" "${provenance_root}/stage" "9.9.9"
@@ -155,5 +159,8 @@ endif()
 file(READ "${provenance_root}/stage/tracked.txt" staged_tracked_source)
 if(NOT staged_tracked_source STREQUAL "committed source\n")
     message(FATAL_ERROR "Lua release staging used uncommitted working-tree content")
+endif()
+if(EXISTS "${provenance_root}/stage/other.txt")
+    message(FATAL_ERROR "Lua release staging used an uncommitted manifest")
 endif()
 file(REMOVE_RECURSE "${extract_root}")

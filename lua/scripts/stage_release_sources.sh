@@ -11,12 +11,15 @@ repo_root=$1
 stage_dir=$2
 version=$3
 version_header=$4
-manifest="$repo_root/lua/RELEASE_MANIFEST.in"
+manifest_path="lua/RELEASE_MANIFEST.in"
 
 [[ -d "$repo_root" ]] || { printf 'Lua release staging repository is missing: %s\n' "$repo_root" >&2; exit 1; }
-[[ -f "$manifest" ]] || { printf 'Lua release manifest is missing: %s\n' "$manifest" >&2; exit 1; }
 [[ -f "$version_header" ]] || { printf 'Lua release version header is missing: %s\n' "$version_header" >&2; exit 1; }
 git -C "$repo_root" rev-parse --verify HEAD >/dev/null 2>&1 || { printf 'Lua release staging requires a committed HEAD: %s\n' "$repo_root" >&2; exit 1; }
+git -C "$repo_root" cat-file -e "HEAD:$manifest_path" 2>/dev/null || {
+  printf 'Lua release manifest is missing from HEAD: %s\n' "$manifest_path" >&2
+  exit 1
+}
 case "$version" in ''|*[!0-9A-Za-z.+-]*) printf 'invalid Lua release version: %s\n' "$version" >&2; exit 2;; esac
 
 mkdir -p "$stage_dir"
@@ -34,7 +37,7 @@ while IFS= read -r entry || [[ -n "$entry" ]]; do
     chmod 755 "$stage_dir/$entry"
   fi
   staged_entries+=("$entry")
-done <"$manifest"
+done < <(git -C "$repo_root" show "HEAD:$manifest_path")
 
 mkdir -p "$stage_dir/include"
 cp "$version_header" "$stage_dir/include/pslog_version.h"
