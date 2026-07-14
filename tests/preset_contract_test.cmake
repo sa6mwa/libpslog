@@ -65,3 +65,9 @@ if(NOT cmake_lists MATCHES "add_executable\\(pslog_clangd_public_consumer EXCLUD
    NOT cmake_lists MATCHES "target_link_libraries\\(pslog_clangd_public_consumer PRIVATE pslog_static Threads::Threads\\)")
     message(FATAL_ERROR "clangd public consumer is missing its exact public CMake compilation target")
 endif()
+file(READ "${PSLOG_ROOT}/lua/scripts/run_interop_embedder_test.sh" lua_interop_runner)
+if(NOT lua_interop_runner MATCHES "run_sysroot_binary\\.sh" OR
+   NOT lua_interop_runner MATCHES "--library-path" OR
+   lua_interop_runner MATCHES "LD_LIBRARY_PATH=.*test_bin")
+    message(FATAL_ERROR "Lua interop consumers must run through the selected sysroot loader")
+endif()

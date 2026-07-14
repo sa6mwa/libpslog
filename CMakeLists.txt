@@ -590,6 +590,20 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    if(PSLOG_TARGET_ID STREQUAL "x86_64-linux-gnu")
+        add_test(NAME run_sysroot_binary_test
+            COMMAND ${CMAKE_COMMAND}
+                -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+                -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+                -DPSLOG_BINARY=$<TARGET_FILE:pslog_valgrind_facade_tests>
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_sysroot_binary_test.cmake
+        )
+        set_tests_properties(run_sysroot_binary_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;smoke"
+            TIMEOUT 30
+        )
+    endif()
     add_test(NAME public_symbol_visibility_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}

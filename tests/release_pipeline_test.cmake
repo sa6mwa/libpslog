@@ -42,3 +42,8 @@ if(NOT makefile MATCHES "HOST_BINARY_RUNNER := \\$\\(CURDIR\\)/scripts/run_host_
    NOT makefile MATCHES "PSLOG_HOST_EXECUTOR=\"\\$\\(HOST_BINARY_RUNNER\\)\"")
     message(FATAL_ERROR "Bootlin-linked Go and performance gates must run through the configured host sysroot runner")
 endif()
+if(NOT makefile MATCHES "loader=\\\"\\$\\$\\(\\./scripts/run_sysroot_binary\\.sh --loader --build-dir" OR
+   NOT makefile MATCHES "valgrind --leak-check=full --track-origins=yes --error-exitcode=1" OR
+   NOT makefile MATCHES "\\\"\\$\\$loader\\\" --library-path")
+    message(FATAL_ERROR "Valgrind must run the selected Bootlin facade process directly through its sysroot loader")
+endif()

@@ -57,8 +57,9 @@ lua_libs="-L${lua_lib_dir} -llua -lm -ldl"
     -L"${sdk_lib_dir}" -lpslog ${lua_libs} -pthread ${ldflags} \
     -o "${test_bin}"
 
-LD_LIBRARY_PATH="${sdk_lib_dir}:${LD_LIBRARY_PATH:-}" \
-DYLD_LIBRARY_PATH="${sdk_lib_dir}:${DYLD_LIBRARY_PATH:-}" \
+"${repo_root}/scripts/run_sysroot_binary.sh" \
+    --build-dir "${build_dir}" \
+    --library-path "${sdk_lib_dir}" \
     "${test_bin}"
 
 installed_header=$(find "${rock_tree}/share/lua" -name pslog_lua.h -type f | head -n 1)
@@ -86,6 +87,8 @@ installed_consumer_src="${repo_root}/tests/lua_interop_installed_consumer.c"
     -Wl,-rpath,"$(dirname "${installed_core}")" \
     -o "${installed_consumer_bin}"
 
-LD_LIBRARY_PATH="${sdk_lib_dir}:$(dirname "${installed_core}"):${LD_LIBRARY_PATH:-}" \
-DYLD_LIBRARY_PATH="${sdk_lib_dir}:$(dirname "${installed_core}"):${DYLD_LIBRARY_PATH:-}" \
+"${repo_root}/scripts/run_sysroot_binary.sh" \
+    --build-dir "${build_dir}" \
+    --library-path "${sdk_lib_dir}" \
+    --library-path "$(dirname "${installed_core}")" \
     "${installed_consumer_bin}"

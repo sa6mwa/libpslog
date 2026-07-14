@@ -263,7 +263,11 @@ test-all:
 valgrind:
 	cmake --preset $(VALGRIND_PRESET)
 	cmake --build --preset $(VALGRIND_PRESET)
-	valgrind --leak-check=full --track-origins=yes --error-exitcode=1 ./scripts/run_sysroot_binary.sh --build-dir ./build/$(VALGRIND_PRESET) ./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
+	@loader="$$(./scripts/run_sysroot_binary.sh --loader --build-dir ./build/$(VALGRIND_PRESET))"; \
+		sysroot="$$(sed -n 's/^CMAKE_SYSROOT:[^=]*=//p' ./build/$(VALGRIND_PRESET)/CMakeCache.txt | tail -n 1)"; \
+		valgrind --leak-check=full --track-origins=yes --error-exitcode=1 \
+			"$$loader" --library-path "$$sysroot/lib:$$sysroot/usr/lib:$$sysroot/lib64:$$sysroot/usr/lib64" \
+			./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
 
 coverage:
 	cmake --preset $(COVERAGE_PRESET)
