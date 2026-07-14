@@ -289,6 +289,17 @@ if(PSLOG_BUILD_TESTS)
         )
     endfunction()
 
+    function(pslog_add_binary_test test_name target test_labels test_timeout)
+        if(DEFINED PSLOG_TEST_EXECUTOR AND NOT PSLOG_TEST_EXECUTOR STREQUAL "")
+            add_test(NAME ${test_name} COMMAND ${PSLOG_TEST_EXECUTOR} $<TARGET_FILE:${target}>)
+        else()
+            # Keep a target name here: CMake then injects the toolchain's
+            # CMAKE_CROSSCOMPILING_EMULATOR for the QEMU targets.
+            add_test(NAME ${test_name} COMMAND ${target})
+        endif()
+        pslog_set_test_properties(${test_name} "${test_labels}" ${test_timeout})
+    endfunction()
+
     string(TOUPPER "${CMAKE_BUILD_TYPE}" PSLOG_TEST_BUILD_TYPE_UPPER)
     set(PSLOG_TEST_C_FLAGS "${CMAKE_C_FLAGS}")
     if(DEFINED CMAKE_C_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER})
@@ -321,8 +332,7 @@ if(PSLOG_BUILD_TESTS)
     target_link_libraries(pslog_tests PRIVATE pslog_test_static jansson)
     pslog_configure_project_warnings(pslog_tests)
     pslog_enable_coverage_if_requested(pslog_tests)
-    add_test(NAME pslog_tests COMMAND pslog_tests)
-    pslog_set_test_properties(pslog_tests "unit;local" 30)
+    pslog_add_binary_test(pslog_tests pslog_tests "unit;local" 30)
 
     # Keep the native Valgrind gate deliberately small.  The full unit binary
     # also exercises intentional termination children and large benchmark
@@ -335,8 +345,7 @@ if(PSLOG_BUILD_TESTS)
     target_link_libraries(pslog_valgrind_facade_tests PRIVATE pslog_static)
     pslog_configure_project_warnings(pslog_valgrind_facade_tests)
     pslog_enable_coverage_if_requested(pslog_valgrind_facade_tests)
-    add_test(NAME pslog_valgrind_facade_tests COMMAND pslog_valgrind_facade_tests)
-    pslog_set_test_properties(pslog_valgrind_facade_tests "unit;local;memory-check" 30)
+    pslog_add_binary_test(pslog_valgrind_facade_tests pslog_valgrind_facade_tests "unit;local;memory-check" 30)
     if(PSLOG_BUILD_LUA)
         add_executable(pslog_lua_interop_tests
             tests/lua_interop_embedder_test.c
@@ -359,8 +368,7 @@ if(PSLOG_BUILD_TESTS)
         )
         pslog_configure_project_warnings(pslog_lua_interop_tests)
         pslog_enable_coverage_if_requested(pslog_lua_interop_tests)
-        add_test(NAME pslog_lua_interop_tests COMMAND pslog_lua_interop_tests)
-        pslog_set_test_properties(pslog_lua_interop_tests "unit;local;lua" 30)
+        pslog_add_binary_test(pslog_lua_interop_tests pslog_lua_interop_tests "unit;local;lua" 30)
         set_tests_properties(pslog_lua_interop_tests PROPERTIES
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
@@ -385,8 +393,7 @@ if(PSLOG_BUILD_TESTS)
     pslog_configure_project_warnings(pslog_single_header_tests)
     add_dependencies(pslog_single_header_tests package-single-header)
     pslog_enable_coverage_if_requested(pslog_single_header_tests)
-    add_test(NAME pslog_single_header_tests COMMAND pslog_single_header_tests)
-    pslog_set_test_properties(pslog_single_header_tests "unit;local;smoke" 30)
+    pslog_add_binary_test(pslog_single_header_tests pslog_single_header_tests "unit;local;smoke" 30)
     add_test(NAME package_archives_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -581,6 +588,7 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    string(JOIN "|" PSLOG_TEST_EXECUTOR_ARG ${PSLOG_TEST_EXECUTOR})
     add_test(NAME example_integration_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -589,9 +597,10 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_C_FLAGS=${PSLOG_TEST_C_FLAGS}
             -DPSLOG_EXE_LINKER_FLAGS=${PSLOG_TEST_EXE_LINKER_FLAGS}
             -DPSLOG_THREAD_LIBS=${CMAKE_THREAD_LIBS_INIT}
-            -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
-            -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/example_integration_test.cmake
+        -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
+        -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
+        -DPSLOG_TEST_EXECUTOR=${PSLOG_TEST_EXECUTOR_ARG}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/example_integration_test.cmake
     )
     set_tests_properties(example_integration_test PROPERTIES
         RUN_SERIAL TRUE

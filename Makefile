@@ -259,7 +259,7 @@ test-all:
 valgrind:
 	cmake --preset $(VALGRIND_PRESET)
 	cmake --build --preset $(VALGRIND_PRESET)
-	valgrind --leak-check=full --track-origins=yes --error-exitcode=1 ./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
+	valgrind --leak-check=full --track-origins=yes --error-exitcode=1 ./scripts/run_sysroot_binary.sh --build-dir ./build/$(VALGRIND_PRESET) ./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
 
 coverage:
 	cmake --preset $(COVERAGE_PRESET)

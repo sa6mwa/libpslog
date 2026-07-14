@@ -358,7 +358,7 @@ and packages `arm64-apple-darwin`.
 Toolchain expectations:
 
 - Linux presets provision checksum-pinned Bootlin GCC collections through `scripts/cpkt-toolchains.sh`; host compilers and binutils are never selected.
-- Native memory checking uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection.
+- Native x86_64 CTest, Valgrind, and AFL++ execution launch through the selected Bootlin sysroot loader, so they do not depend on a matching host glibc or musl installation. Native memory checking still uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection.
 - `clang-format` and `clangd` are host development tools only. `make clangd` checks the native debug translation unit with `build/debug/compile_commands.json`, including its public-header surface. Public declarations use Doxygen comments so hover documentation remains useful in clangd. clangd is not a compiler, target-ABI verifier, package check, or release dependency; cross builds, packages, and releases do not invoke it.
 - The shared toolchain cache is `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}`. External dependency archives use `${CPKT_DEPENDENCY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/deps}`. Both survive `make clean`; only disposable extracted dependency state under the repository’s `.cache/` is removed.
 - Cross test execution requires `qemu-aarch64` and `qemu-arm`; each uses the matching Bootlin sysroot.

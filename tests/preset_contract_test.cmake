@@ -40,3 +40,10 @@ foreach(target_id IN ITEMS
         message(FATAL_ERROR "release preset does not declare target ID: ${target_id}")
     endif()
 endforeach()
+foreach(native_toolchain IN ITEMS linux-x86_64-gnu.cmake linux-x86_64-musl.cmake)
+    file(READ "${PSLOG_ROOT}/cmake/toolchains/${native_toolchain}" native_toolchain_text)
+    if(NOT native_toolchain_text MATCHES "PSLOG_TEST_EXECUTOR" OR
+       NOT native_toolchain_text MATCHES "run_sysroot_binary\\.sh")
+        message(FATAL_ERROR "native Bootlin toolchain is missing its sysroot runtime executor: ${native_toolchain}")
+    endif()
+endforeach()
