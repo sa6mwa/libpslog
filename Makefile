@@ -51,8 +51,11 @@ LUA_ROCK_TREE := build/luarocks
 LUA_ROCKSPEC := $(LUA_ROCK_TREE)/lua-pslog-$(LUA_RELEASE_VERSION)-1.rockspec
 LUA_ROCK_STAMP := $(LUA_ROCK_TREE)/.installed.stamp
 LUA_ROCK_BUILD_LOCK := $(LUA_ROCK_TREE)/.build.lock
-LUA_HOST_INCLUDE_DIR := $(shell luarocks config variables.LUA_INCDIR)
-LUA_HOST_LIB_DIR := $(shell luarocks config variables.LUA_LIBDIR)
+LUA_ROCKS ?= luarocks
+# Resolve optional LuaRocks state only for Lua targets.  Immediate $(shell ...)
+# expansion would make every C-only Make command depend on LuaRocks.
+LUA_HOST_INCLUDE_DIR = $(shell $(LUA_ROCKS) config variables.LUA_INCDIR 2>/dev/null)
+LUA_HOST_LIB_DIR = $(shell $(LUA_ROCKS) config variables.LUA_LIBDIR 2>/dev/null)
 LUA_STAGED_ROOT := build/lua-host
 LUA_STAGED_INCLUDE_DIR := $(LUA_STAGED_ROOT)/include
 LUA_STAGED_LIB_DIR := $(LUA_STAGED_ROOT)/lib
@@ -293,7 +296,7 @@ bench: benchmarks
 bench-gate: perf-gate
 
 elevatorpitch: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
+	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
 
 cross-build:
 	@set -e; for preset in $(CROSS_RELEASE_PRESETS); do \
@@ -391,7 +394,7 @@ $(LUA_RELEASE_SOURCE_TARBALL): $(LUA_RELEASE_STAGE_DIR) | $(LUA_DIST_DIR)
 
 $(LUA_RELEASE_ROCK): $(LUA_RELEASE_PACK_ROCKSPEC) $(LUA_RELEASE_ROCKSPEC) $(LUA_RELEASE_SOURCE_TARBALL)
 	rm -f "$(LUA_RELEASE_ROCK)"
-	cd "$(LUA_RELEASE_PACK_DIR)" && luarocks pack "$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))"
+	cd "$(LUA_RELEASE_PACK_DIR)" && "$(LUA_ROCKS)" pack "$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))"
 	mv "$(LUA_RELEASE_PACK_DIR)/$(notdir $(LUA_RELEASE_ROCK))" "$(LUA_RELEASE_ROCK)"
 	@tmp_dir="$$(mktemp -d)"; \
 	trap 'rm -rf "$$tmp_dir"' EXIT; \
@@ -402,7 +405,7 @@ $(LUA_RELEASE_ROCK): $(LUA_RELEASE_PACK_ROCKSPEC) $(LUA_RELEASE_ROCKSPEC) $(LUA_
 lua-rock: $(LUA_ROCK_STAMP)
 
 lua-env:
-	@printf '%s\n' 'eval "$$(luarocks path --tree $(LUA_ROCK_TREE))"'
+	@printf '%s\n' 'eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))"'
 	@printf '%s\n' 'export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}"'
 	@printf '%s\n' 'export DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"'
 
@@ -413,6 +416,7 @@ $(LUA_ROCKSPEC): $(LUA_ROCK_SOURCES)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_ROCKSPEC)" "git+file://$(CURDIR)"
 
 $(LUA_STAGED_LUA_DEPS):
+	@command -v "$(LUA_ROCKS)" >/dev/null 2>&1 || { echo 'LuaRocks for Lua 5.5 is required; install it or set LUA_ROCKS'; exit 1; }
 	@test -n "$(LUA_HOST_INCLUDE_DIR)" || { echo 'Lua 5.5 development headers are required through LuaRocks'; exit 1; }
 	@test -n "$(LUA_HOST_LIB_DIR)" || { echo 'Lua 5.5 development library is required through LuaRocks'; exit 1; }
 	test -f "$(LUA_HOST_INCLUDE_DIR)/lua.h" || { echo "missing Lua 5.5 header: $(LUA_HOST_INCLUDE_DIR)/lua.h"; exit 1; }
@@ -432,12 +436,12 @@ $(LUA_SDK_STAMP): build-host
 	touch "$@"
 
 $(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) $(LUA_STAGED_LUA_DEPS) $(LUA_SDK_STAMP)
-	flock "$(LUA_ROCK_BUILD_LOCK)" env CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" bash -lc 'set -e; luarocks make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LUA_INCDIR="$(CURDIR)/$(LUA_STAGED_INCLUDE_DIR)" LIBPSLOG_INCDIR="$(LUA_SDK_INCLUDE_DIR)" LIBPSLOG_LIBDIR="$(LUA_SDK_LIB_DIR)"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
+	flock "$(LUA_ROCK_BUILD_LOCK)" env CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" bash -lc 'set -e; "$(LUA_ROCKS)" make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LUA_INCDIR="$(CURDIR)/$(LUA_STAGED_INCLUDE_DIR)" LIBPSLOG_INCDIR="$(LUA_SDK_INCLUDE_DIR)" LIBPSLOG_LIBDIR="$(LUA_SDK_LIB_DIR)"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
 
 lua-test: lua-rock
 	LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}" ./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
 	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./lua/scripts/run_interop_embedder_test.sh "$(CURDIR)/build/$(HOST_PRESET)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)" "$(LUA_SDK_PREFIX)"
-	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && lua lua/tests/test_pslog.lua
+	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && lua lua/tests/test_pslog.lua
 
 $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATASET_TOOL) $(GO_PRODUCTION_DATASET_SOURCE)
 	@tmp_bin="$$(mktemp "$(CURDIR)/.gen_go_production_dataset.XXXXXX")"; tmp_output="$$(mktemp "$(CURDIR)/.gen_go_production_dataset_output.XXXXXX")"; \
