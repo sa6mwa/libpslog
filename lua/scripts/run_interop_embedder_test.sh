@@ -18,7 +18,7 @@ else
         printf 'lua interop embedder test: missing configured Bootlin compiler cache: %s\n' "${cache_file}" >&2
         exit 1
     fi
-    cc_bin=$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' "${cache_file}" | tail -n 1)
+    cc_bin=$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' "${cache_file}" | tail -n 1)
 fi
 if [ -z "${cc_bin}" ] || [ ! -x "${cc_bin}" ]; then
     printf 'lua interop embedder test: configured C compiler is unavailable: %s\n' "${cc_bin:-<empty>}" >&2

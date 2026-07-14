@@ -10,7 +10,7 @@ Build it in normal library mode:
 cmake --preset host
 cmake --build --preset host
 cd examples
-"$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
+"$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
   -o example example.c ../build/host/libpslog.a -pthread
 ./example
 ```
@@ -25,7 +25,7 @@ Build it in single-header mode:
 cmake --preset host
 cmake --build ../build/host --target package-single-header
 cd examples
-"$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
+"$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
   -I../build/host/generated/include \
   -o example example.c -pthread
 ./example

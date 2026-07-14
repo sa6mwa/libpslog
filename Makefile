@@ -55,8 +55,8 @@ GO_PRODUCTION_DATASET_SOURCE := bench/bench_production_dataset.c
 GO_PRODUCTION_DATASET_TOOL := bench/gen_go_production_dataset.c
 GO_CKVFMT_WRAPPERS := gobencher/benchmark/cpslog_kvfmt_generated.go
 HOST_GENERATED_VERSION_HEADER := $(CURDIR)/build/host/generated/include/pslog_version.h
-HOST_C_COMPILER = $(shell sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' build/host/CMakeCache.txt | head -n 1)
-HOST_CXX_COMPILER = $(shell sed -n 's/^CMAKE_CXX_COMPILER:FILEPATH=//p' build/host/CMakeCache.txt | head -n 1)
+HOST_C_COMPILER = $(shell sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | head -n 1)
+HOST_CXX_COMPILER = $(shell sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | head -n 1)
 
 BENCH_ITERS ?= 200000
 FUZZ_TIME ?= 30
@@ -392,11 +392,12 @@ lua-test: lua-rock
 	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$(luarocks path --tree $(LUA_ROCK_TREE))" && lua lua/tests/test_pslog.lua
 
 $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATASET_TOOL) $(GO_PRODUCTION_DATASET_SOURCE)
-	@tmp_bin="$$(mktemp "$(CURDIR)/.gen_go_production_dataset.XXXXXX")"; \
+	@tmp_bin="$$(mktemp "$(CURDIR)/.gen_go_production_dataset.XXXXXX")"; tmp_output="$$(mktemp "$(CURDIR)/.gen_go_production_dataset_output.XXXXXX")"; \
+	trap 'rm -f "$$tmp_bin" "$$tmp_output"' EXIT; \
 	rm -f "$$tmp_bin"; \
 	"$(HOST_C_COMPILER)" -std=c99 -O2 -I"$(CURDIR)" -I"$(CURDIR)/include" -I"$(CURDIR)/build/host/generated/include" "$(GO_PRODUCTION_DATASET_TOOL)" "$(GO_PRODUCTION_DATASET_SOURCE)" -o "$$tmp_bin"; \
-	"$$tmp_bin" >"$(GO_PRODUCTION_DATASET)"; \
-	rm -f "$$tmp_bin"
+	"$$tmp_bin" >"$$tmp_output"; \
+	mv "$$tmp_output" "$(GO_PRODUCTION_DATASET)"
 
 $(GO_CKVFMT_WRAPPERS): $(GO_PRODUCTION_DATASET) gobencher/cmd/gen_ckvfmt_wrappers/main.go gobencher/benchmark/cpslog_kvfmt.go
 	cd gobencher/benchmark && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ../cmd/gen_ckvfmt_wrappers
