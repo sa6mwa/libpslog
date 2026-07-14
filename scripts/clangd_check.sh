@@ -24,6 +24,11 @@ command -v clangd >/dev/null 2>&1 || {
   printf 'clangd_check: source is missing: %s\n' "$source_file" >&2
   exit 1
 }
+if ! grep -Fq "\"file\": \"$source_file\"" "$database_dir/compile_commands.json"; then
+  printf 'clangd_check: native public-consumer command is missing from %s: %s\n' \
+    "$database_dir/compile_commands.json" "$source_file" >&2
+  exit 1
+fi
 
 cd "$repo_root"
 output_file=$(mktemp)

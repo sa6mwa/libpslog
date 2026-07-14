@@ -241,6 +241,13 @@ foreach(target pslog_shared pslog_static)
     pslog_enable_coverage_if_requested(${target})
 endforeach()
 
+# Keep an exact native public-consumer command in compile_commands.json for
+# clangd. This target is excluded from normal builds because it is an editor
+# validation surface, not a second example build path.
+add_executable(pslog_clangd_public_consumer EXCLUDE_FROM_ALL examples/example.c)
+target_link_libraries(pslog_clangd_public_consumer PRIVATE pslog_static Threads::Threads)
+pslog_configure_c_target(pslog_clangd_public_consumer)
+
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(pslog_shared PRIVATE -fvisibility=hidden)
 endif()
@@ -510,6 +517,15 @@ if(PSLOG_BUILD_TESTS)
     set_tests_properties(cpkt_toolchains_cache_recovery_test PROPERTIES
         RUN_SERIAL TRUE
         LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME cpkt_aflpp_cache_lock_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cpkt_aflpp_cache_lock_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cpkt_aflpp_cache_lock_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "fuzz;local;smoke"
         TIMEOUT 30
     )
     add_test(NAME fuzz_gate_test

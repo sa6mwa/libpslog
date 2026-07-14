@@ -37,3 +37,8 @@ if(NOT makefile MATCHES "test-all:\n[ \t]*\\$\\(TIMED\\) test \\$\\(MAKE\\) test
    NOT makefile MATCHES "\\$\\(TIMED\\) perf-gate \\$\\(MAKE\\) perf-gate")
     message(FATAL_ERROR "test-all must expose its serial release timing phases")
 endif()
+if(NOT makefile MATCHES "HOST_BINARY_RUNNER := \\$\\(CURDIR\\)/scripts/run_host_binary\\.sh" OR
+   NOT makefile MATCHES "go test -exec \"\\$\\(HOST_BINARY_RUNNER\\)\"" OR
+   NOT makefile MATCHES "PSLOG_HOST_EXECUTOR=\"\\$\\(HOST_BINARY_RUNNER\\)\"")
+    message(FATAL_ERROR "Bootlin-linked Go and performance gates must run through the configured host sysroot runner")
+endif()

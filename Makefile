@@ -84,6 +84,7 @@ GO_CKVFMT_WRAPPERS := gobencher/benchmark/cpslog_kvfmt_generated.go
 HOST_GENERATED_VERSION_HEADER := $(CURDIR)/build/host/generated/include/pslog_version.h
 HOST_C_COMPILER = $(shell sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | head -n 1)
 HOST_CXX_COMPILER = $(shell sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | head -n 1)
+HOST_BINARY_RUNNER := $(CURDIR)/scripts/run_host_binary.sh
 
 BENCH_ITERS ?= 200000
 FUZZ_TIME ?= 30
@@ -246,10 +247,10 @@ test-host: build-host
 	ctest --preset $(HOST_PRESET) --output-on-failure
 
 gobencher-tests: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test -a ./...
+	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test -exec "$(HOST_BINARY_RUNNER)" -a ./...
 
 perf-gate: build-host lua-rock
-	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./bench/run_perf_gate.sh
+	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" PSLOG_HOST_EXECUTOR="$(HOST_BINARY_RUNNER)" ./bench/run_perf_gate.sh
 
 test-all:
 	$(TIMED) test $(MAKE) test
@@ -280,10 +281,10 @@ fuzz-long:
 	./scripts/fuzz.sh long $(FUZZ_LONG_TIME)
 
 benchmarks-c: build-host
-	./build/host/pslog_bench $(BENCH_ITERS) all
+	"$(HOST_BINARY_RUNNER)" ./build/host/pslog_bench $(BENCH_ITERS) all
 
 benchmarks-gobencher: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test ./benchmark -run '^$$' -bench . -benchmem -count=$(GO_BENCH_COUNT)
+	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test -exec "$(HOST_BINARY_RUNNER)" ./benchmark -run '^$$' -bench . -benchmem -count=$(GO_BENCH_COUNT)
 
 benchmarks-go: benchmarks-gobencher
 
@@ -296,7 +297,7 @@ bench: benchmarks
 bench-gate: perf-gate
 
 elevatorpitch: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
+	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run -exec "$(HOST_BINARY_RUNNER)" ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
 
 cross-build:
 	@set -e; for preset in $(CROSS_RELEASE_PRESETS); do \
@@ -448,7 +449,7 @@ $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATAS
 	trap 'rm -f "$$tmp_bin" "$$tmp_output"' EXIT; \
 	rm -f "$$tmp_bin"; \
 	"$(HOST_C_COMPILER)" -std=c99 -O2 -I"$(CURDIR)" -I"$(CURDIR)/include" -I"$(CURDIR)/build/host/generated/include" "$(GO_PRODUCTION_DATASET_TOOL)" "$(GO_PRODUCTION_DATASET_SOURCE)" -o "$$tmp_bin"; \
-	"$$tmp_bin" >"$$tmp_output"; \
+	"$(HOST_BINARY_RUNNER)" "$$tmp_bin" >"$$tmp_output"; \
 	mv "$$tmp_output" "$(GO_PRODUCTION_DATASET)"
 
 $(GO_CKVFMT_WRAPPERS): $(GO_PRODUCTION_DATASET) $(LUA_SDK_STAMP) gobencher/cmd/gen_ckvfmt_wrappers/main.go gobencher/benchmark/cpslog_kvfmt.go

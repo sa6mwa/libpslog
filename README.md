@@ -391,7 +391,7 @@ There are two benchmark layers:
 Useful commands:
 
 ```sh
-./build/host/pslog_bench 200000 all
+make benchmarks-c
 ./bench/run_rebaseline.sh
 ```
 

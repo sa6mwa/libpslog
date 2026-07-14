@@ -61,13 +61,13 @@ recording new comparison runs.
 Run the whole matrix:
 
 ```sh
-./build/host/pslog_bench 200000 all
+make benchmarks-c
 ```
 
 Representative focused run:
 
 ```sh
-./build/host/pslog_bench 200000 \
+./scripts/run_host_binary.sh ./build/host/pslog_bench 200000 \
   console_prod_with_log_fields \
   console_prod_with_level_fields_build \
   console_prod_with_levelf_kvfmt \
@@ -117,7 +117,7 @@ See [gobencher/README.md](../gobencher/README.md) for the caveats and the elevat
 ```sh
 cmake --preset host -DPSLOG_BENCHMARK_WITH_LIBLOGGER=ON
 cmake --build --preset host
-./build/host/pslog_bench 200000 liblogger_json liblogger_json_prod
+./scripts/run_host_binary.sh ./build/host/pslog_bench 200000 liblogger_json liblogger_json_prod
 ```
 
 This fetches both `liblogger` and its `jansson` dependency only for the benchmark build.
