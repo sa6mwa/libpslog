@@ -428,6 +428,11 @@ Build the local rock tree:
 make lua-rock
 ```
 
+This installs the Bootlin-built public C SDK under `build/lua-sdk/` first. The
+rock, Lua/C interop checks, and embedded Lua benchmarks compile and link only
+against that installed local SDK, while Lua 5.5 headers and its static runtime
+are staged separately under `build/lua-host/`.
+
 Run the Lua tests:
 
 ```sh

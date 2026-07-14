@@ -5,7 +5,7 @@
 
 #include <lua.h>
 
-#include "pslog.h"
+#include <pslog.h>
 
 #ifdef __cplusplus
 extern "C" {

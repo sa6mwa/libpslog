@@ -65,11 +65,6 @@ function(pslog_enable_coverage_if_requested target)
 endfunction()
 
 find_program(CLANG_FORMAT_BIN NAMES clang-format)
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    pkg_check_modules(PSLOG_LUA QUIET lua5.5)
-endif()
-
 file(GLOB_RECURSE PSLOG_FORMAT_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp
@@ -113,7 +108,7 @@ add_custom_target(format DEPENDS clang-format)
 option(PSLOG_BUILD_TESTS "Build unit tests" ON)
 option(PSLOG_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(PSLOG_BUILD_FUZZ "Build fuzz targets" OFF)
-option(PSLOG_BUILD_LUA "Enable the Lua facade checks" ON)
+option(PSLOG_BUILD_LUA "Enable the staged Lua facade CTest" OFF)
 option(PSLOG_BENCHMARK_WITH_LIBLOGGER "Enable optional benchmark-only liblogger comparisons" OFF)
 option(PSLOG_BENCHMARK_WITH_QUILL "Enable optional benchmark-only Quill comparisons" OFF)
 option(PSLOG_ENABLE_COVERAGE "Build test targets with gcov coverage instrumentation" OFF)
@@ -121,6 +116,28 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/pslog_dependencies.cmake")
 set(PSLOG_DEPENDENCY_MODE "bundled-sdk" CACHE STRING
     "Dependency resolution mode used by lifecycle presets")
 set_property(CACHE PSLOG_DEPENDENCY_MODE PROPERTY STRINGS bundled-sdk)
+
+set(PSLOG_LUA_STAGE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/build/lua-host" CACHE PATH
+    "Repository-local staged Lua 5.5 development root")
+set(PSLOG_LUA_SDK_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/build/lua-sdk" CACHE PATH
+    "Repository-local installed libpslog SDK prefix used by Lua checks")
+set(PSLOG_LUA_STAGE_INCLUDE_DIR "${PSLOG_LUA_STAGE_ROOT}/include")
+set(PSLOG_LUA_STAGE_LIBRARY "${PSLOG_LUA_STAGE_ROOT}/lib/liblua.a")
+set(PSLOG_LUA_SDK_INCLUDE_DIR "${PSLOG_LUA_SDK_PREFIX}/include")
+set(PSLOG_LUA_SDK_LIBRARY "${PSLOG_LUA_SDK_PREFIX}/lib/libpslog.so")
+if(PSLOG_BUILD_LUA)
+    foreach(required_lua_path IN ITEMS
+            "${PSLOG_LUA_STAGE_INCLUDE_DIR}/lua.h"
+            "${PSLOG_LUA_STAGE_LIBRARY}"
+            "${PSLOG_LUA_SDK_INCLUDE_DIR}/pslog.h"
+            "${PSLOG_LUA_SDK_LIBRARY}")
+        if(NOT EXISTS "${required_lua_path}")
+            message(FATAL_ERROR
+                "staged Lua CTest dependency is missing: ${required_lua_path}. "
+                "Run 'make lua-rock' before configuring the debug-lua preset.")
+        endif()
+    endforeach()
+endif()
 
 if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER OR PSLOG_BENCHMARK_WITH_QUILL)
     include(FetchContent)
@@ -320,29 +337,25 @@ if(PSLOG_BUILD_TESTS)
     pslog_enable_coverage_if_requested(pslog_valgrind_facade_tests)
     add_test(NAME pslog_valgrind_facade_tests COMMAND pslog_valgrind_facade_tests)
     pslog_set_test_properties(pslog_valgrind_facade_tests "unit;local;memory-check" 30)
-    if(PSLOG_BUILD_LUA AND PSLOG_LUA_FOUND)
+    if(PSLOG_BUILD_LUA)
         add_executable(pslog_lua_interop_tests
             tests/lua_interop_embedder_test.c
             lua/src/pslog_lua.c
         )
         target_include_directories(pslog_lua_interop_tests PRIVATE
-            ${PSLOG_GENERATED_INCLUDE_DIR}
+            ${PSLOG_LUA_STAGE_INCLUDE_DIR}
+            ${PSLOG_LUA_SDK_INCLUDE_DIR}
             include
-            ${PSLOG_LUA_INCLUDE_DIRS}
         )
         target_compile_definitions(pslog_lua_interop_tests PRIVATE
             PSLOG_VERSION_STRING="${PSLOG_RESOLVED_VERSION}"
             _POSIX_C_SOURCE=200809L
         )
-        target_compile_options(pslog_lua_interop_tests PRIVATE
-            ${PSLOG_LUA_CFLAGS_OTHER}
-        )
-        target_link_directories(pslog_lua_interop_tests PRIVATE
-            ${PSLOG_LUA_LIBRARY_DIRS}
-        )
         target_link_libraries(pslog_lua_interop_tests PRIVATE
             pslog_test_static
-            ${PSLOG_LUA_LIBRARIES}
+            ${PSLOG_LUA_STAGE_LIBRARY}
+            m
+            ${CMAKE_DL_LIBS}
         )
         pslog_configure_project_warnings(pslog_lua_interop_tests)
         pslog_enable_coverage_if_requested(pslog_lua_interop_tests)
@@ -385,6 +398,7 @@ if(PSLOG_BUILD_TESTS)
         -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
         -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
+        -DPSLOG_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
         -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_archives_test.cmake
     )

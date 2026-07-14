@@ -12,6 +12,7 @@
         "PSLOG_DEPENDENCY_MODE": "bundled-sdk",
         "PSLOG_BUILD_TESTS": "ON",
         "PSLOG_BUILD_BENCHMARKS": "ON",
+        "PSLOG_BUILD_LUA": "OFF",
         "PSLOG_BUILD_FUZZ": "OFF"
       }
     },

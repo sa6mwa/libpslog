@@ -196,19 +196,19 @@ function(assert_archive_layout archive_path)
         message(FATAL_ERROR "CMake package version config has wrong version: ${archive_path}")
     endif()
 
-    if(NOT PSLOG_CROSSCOMPILING AND archive_path STREQUAL archive)
-        set(cmake_consumer_root "${PSLOG_BINARY_DIR}/package-archive-cmake-consumer-test")
-        set(cmake_consumer_build "${cmake_consumer_root}/build")
-        file(REMOVE_RECURSE "${cmake_consumer_root}")
-        file(MAKE_DIRECTORY "${cmake_consumer_root}")
-        file(WRITE "${cmake_consumer_root}/CMakeLists.txt"
+    set(cmake_consumer_root "${PSLOG_BINARY_DIR}/package-archive-cmake-consumer-test")
+    set(cmake_consumer_build "${cmake_consumer_root}/build")
+    file(REMOVE_RECURSE "${cmake_consumer_root}")
+    file(MAKE_DIRECTORY "${cmake_consumer_root}")
+    file(WRITE "${cmake_consumer_root}/CMakeLists.txt"
 "cmake_minimum_required(VERSION 3.21)
 project(pslog_package_consumer C)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
 find_package(pslog ${PSLOG_VERSION} CONFIG REQUIRED)
 add_executable(pslog_package_consumer main.c)
 target_link_libraries(pslog_package_consumer PRIVATE pslog::pslog)
 ")
-        file(WRITE "${cmake_consumer_root}/main.c"
+    file(WRITE "${cmake_consumer_root}/main.c"
 "#include <pslog.h>
 
 int main(void) {
@@ -218,65 +218,72 @@ int main(void) {
 }
 ")
 
+    set(cmake_consumer_configure_args
+        -DCMAKE_PREFIX_PATH=${extracted_package_root}
+        -DCMAKE_C_COMPILER=${PSLOG_C_COMPILER}
+        -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+    )
+    if(DEFINED PSLOG_TOOLCHAIN_FILE AND NOT PSLOG_TOOLCHAIN_FILE STREQUAL "")
+        list(APPEND cmake_consumer_configure_args
+            -DCMAKE_TOOLCHAIN_FILE=${PSLOG_TOOLCHAIN_FILE})
+    endif()
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -S "${cmake_consumer_root}" -B "${cmake_consumer_build}"
+                ${cmake_consumer_configure_args}
+        RESULT_VARIABLE cmake_consumer_configure_result
+        OUTPUT_VARIABLE cmake_consumer_configure_stdout
+        ERROR_VARIABLE cmake_consumer_configure_stderr
+    )
+    if(NOT cmake_consumer_configure_result EQUAL 0)
+        message(FATAL_ERROR
+            "failed to configure CMake consumer against archive metadata: ${archive_path}\n"
+            "stdout:\n${cmake_consumer_configure_stdout}\n"
+            "stderr:\n${cmake_consumer_configure_stderr}")
+    endif()
+
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" --build "${cmake_consumer_build}"
+        RESULT_VARIABLE cmake_consumer_build_result
+        OUTPUT_VARIABLE cmake_consumer_build_stdout
+        ERROR_VARIABLE cmake_consumer_build_stderr
+    )
+    if(NOT cmake_consumer_build_result EQUAL 0)
+        message(FATAL_ERROR
+            "failed to build CMake consumer against archive metadata: ${archive_path}\n"
+            "stdout:\n${cmake_consumer_build_stdout}\n"
+            "stderr:\n${cmake_consumer_build_stderr}")
+    endif()
+
+    find_program(PKG_CONFIG_BIN NAMES pkg-config)
+    if(PKG_CONFIG_BIN)
         execute_process(
-            COMMAND "${CMAKE_COMMAND}" -S "${cmake_consumer_root}" -B "${cmake_consumer_build}"
-                    -DCMAKE_PREFIX_PATH=${extracted_package_root}
-                    -DCMAKE_C_COMPILER=${PSLOG_C_COMPILER}
-            RESULT_VARIABLE cmake_consumer_configure_result
-            OUTPUT_VARIABLE cmake_consumer_configure_stdout
-            ERROR_VARIABLE cmake_consumer_configure_stderr
+            COMMAND "${CMAKE_COMMAND}" -E env
+                    "PKG_CONFIG_PATH=${extracted_package_root}/lib/pkgconfig"
+                    "${PKG_CONFIG_BIN}" --cflags --libs pslog
+            RESULT_VARIABLE pkg_config_result
+            OUTPUT_VARIABLE pkg_config_flags
+            ERROR_VARIABLE pkg_config_stderr
+            OUTPUT_STRIP_TRAILING_WHITESPACE
         )
-        if(NOT cmake_consumer_configure_result EQUAL 0)
+        if(NOT pkg_config_result EQUAL 0)
             message(FATAL_ERROR
-                "failed to configure CMake consumer against archive metadata: ${archive_path}\n"
-                "stdout:\n${cmake_consumer_configure_stdout}\n"
-                "stderr:\n${cmake_consumer_configure_stderr}")
+                "pkg-config could not resolve pslog metadata: ${archive_path}\n"
+                "stderr:\n${pkg_config_stderr}")
         endif()
 
+        separate_arguments(pkg_config_compile_flags NATIVE_COMMAND "${pkg_config_flags}")
         execute_process(
-            COMMAND "${CMAKE_COMMAND}" --build "${cmake_consumer_build}"
-            RESULT_VARIABLE cmake_consumer_build_result
-            OUTPUT_VARIABLE cmake_consumer_build_stdout
-            ERROR_VARIABLE cmake_consumer_build_stderr
+            COMMAND "${PSLOG_C_COMPILER}" "-o" "${cmake_consumer_root}/pkg-config-consumer"
+                    "${cmake_consumer_root}/main.c" ${pkg_config_compile_flags}
+            RESULT_VARIABLE pkg_config_compile_result
+            OUTPUT_VARIABLE pkg_config_compile_stdout
+            ERROR_VARIABLE pkg_config_compile_stderr
         )
-        if(NOT cmake_consumer_build_result EQUAL 0)
+        if(NOT pkg_config_compile_result EQUAL 0)
             message(FATAL_ERROR
-                "failed to build CMake consumer against archive metadata: ${archive_path}\n"
-                "stdout:\n${cmake_consumer_build_stdout}\n"
-                "stderr:\n${cmake_consumer_build_stderr}")
-        endif()
-
-        find_program(PKG_CONFIG_BIN NAMES pkg-config)
-        if(PKG_CONFIG_BIN)
-            execute_process(
-                COMMAND "${CMAKE_COMMAND}" -E env
-                        "PKG_CONFIG_PATH=${extracted_package_root}/lib/pkgconfig"
-                        "${PKG_CONFIG_BIN}" --cflags --libs pslog
-                RESULT_VARIABLE pkg_config_result
-                OUTPUT_VARIABLE pkg_config_flags
-                ERROR_VARIABLE pkg_config_stderr
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-            )
-            if(NOT pkg_config_result EQUAL 0)
-                message(FATAL_ERROR
-                    "pkg-config could not resolve pslog metadata: ${archive_path}\n"
-                    "stderr:\n${pkg_config_stderr}")
-            endif()
-
-            separate_arguments(pkg_config_compile_flags NATIVE_COMMAND "${pkg_config_flags}")
-            execute_process(
-                COMMAND "${PSLOG_C_COMPILER}" "-o" "${cmake_consumer_root}/pkg-config-consumer"
-                        "${cmake_consumer_root}/main.c" ${pkg_config_compile_flags}
-                RESULT_VARIABLE pkg_config_compile_result
-                OUTPUT_VARIABLE pkg_config_compile_stdout
-                ERROR_VARIABLE pkg_config_compile_stderr
-            )
-            if(NOT pkg_config_compile_result EQUAL 0)
-                message(FATAL_ERROR
-                    "failed to compile pkg-config consumer against archive metadata: ${archive_path}\n"
-                    "stdout:\n${pkg_config_compile_stdout}\n"
-                    "stderr:\n${pkg_config_compile_stderr}")
-            endif()
+                "failed to compile pkg-config consumer against archive metadata: ${archive_path}\n"
+                "stdout:\n${pkg_config_compile_stdout}\n"
+                "stderr:\n${pkg_config_compile_stderr}")
         endif()
     endif()
 endfunction()

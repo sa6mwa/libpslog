@@ -12,6 +12,13 @@ file(WRITE "${source_archive}" "verified fixture archive\n")
 file(SHA256 "${source_archive}" fixture_sha256)
 
 include("${PSLOG_ROOT}/cmake/pslog_dependencies.cmake")
+file(READ "${PSLOG_ROOT}/cmake/pslog_dependencies.cmake" dependency_helper)
+if(NOT dependency_helper MATCHES "file\\(LOCK[ \\t]+\"\\$\\{lock_path\\}\"")
+    message(FATAL_ERROR "dependency cache helper does not serialize archive writers per digest")
+endif()
+if(NOT dependency_helper MATCHES "file\\(RENAME[ \\t]+\"\\$\\{temp_path\\}\"[ \\t]+\"\\$\\{archive_path\\}\"")
+    message(FATAL_ERROR "dependency cache helper does not atomically publish verified archives")
+endif()
 pslog_acquire_verified_archive(
     COMPONENT fixture URL "file://${source_archive}" SHA256 "${fixture_sha256}" OUTPUT first_archive)
 if(NOT EXISTS "${first_archive}")

@@ -30,8 +30,9 @@ cmake --build --preset host
 make lua-rock
 ```
 
-The cgo bridge links against `../build/host/libpslog.a`.
-It also includes the generated host header directory at `../build/host/generated/include`.
+The cgo bridge links against the repo-local installed SDK at
+`../build/lua-sdk/lib/libpslog.a` and uses its public headers from
+`../build/lua-sdk/include`.
 The embedded-Lua compare path loads the shipped rock from `../build/luarocks`.
 
 ## Useful Commands

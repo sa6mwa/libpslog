@@ -21,3 +21,7 @@ if(pipeline_offset LESS 0 OR format_offset LESS pipeline_offset OR
    ordinary_offset LESS format_offset OR matrix_offset LESS ordinary_offset)
     message(FATAL_ERROR "release-pipeline does not run ordinary checks before release-matrix")
 endif()
+
+if(NOT makefile MATCHES "prerelease-hardening: prerelease fuzz-long")
+    message(FATAL_ERROR "prerelease-hardening must include the explicit long AFL++ tier")
+endif()

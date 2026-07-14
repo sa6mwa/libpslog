@@ -6,8 +6,8 @@
 #include <lauxlib.h>
 #include <lua.h>
 
-#include "pslog.h"
-#include "pslog_lua.h"
+#include <pslog.h>
+#include <pslog_lua.h>
 
 #define PSLUA_LOGGER_MT "pslog.logger"
 #define PSLUA_WRAPPER_MT "pslog.wrapper"

@@ -242,6 +242,11 @@ make lua-rock
 make lua-test
 ```
 
+`make lua-rock` first installs the Bootlin-built public C SDK into the
+repo-local `build/lua-sdk/` prefix. The Lua module, C interop checks, and Go
+Lua benchmark bridge all consume that installed SDK rather than source-tree
+headers or libraries.
+
 Run the Lua examples from the repository root:
 
 ```sh
@@ -281,6 +286,7 @@ make benchmarks-gobencher
 make benchmarks-all
 make lua-test
 make prerelease
+make prerelease-hardening
 make release
 ```
 
@@ -317,6 +323,8 @@ make release-matrix
 `make prerelease` runs the shared deterministic proof graph without cleaning
 generated state first. `make release` cleans first and then runs that exact
 same proof graph; it is the final local release gate.
+`make prerelease-hardening` adds the explicit long AFL++ fuzz tier to that
+proof graph.
 
 That script runs, for every shipped Linux target:
 
