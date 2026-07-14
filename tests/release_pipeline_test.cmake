@@ -9,7 +9,7 @@ file(READ "${PSLOG_ROOT}/Makefile" makefile)
 if(NOT makefile MATCHES "prerelease: release-pipeline")
     message(FATAL_ERROR "prerelease does not invoke the shared release-pipeline")
 endif()
-if(NOT makefile MATCHES "release:\n[ \t]*\\$\\(MAKE\\) clean\n[ \t]*\\$\\(MAKE\\) release-pipeline")
+if(NOT makefile MATCHES "release:\n[ \t]*PKT_TIMING_FILE=.*release-clean \\$\\(MAKE\\) clean\n[ \t]*PKT_TIMING_FILE=.*release-pipeline \\$\\(MAKE\\) release-pipeline")
     message(FATAL_ERROR "release must clean before invoking the shared release-pipeline")
 endif()
 
@@ -24,4 +24,9 @@ endif()
 
 if(NOT makefile MATCHES "prerelease-hardening: prerelease fuzz-long")
     message(FATAL_ERROR "prerelease-hardening must include the explicit long AFL++ tier")
+endif()
+
+if(NOT makefile MATCHES "RELEASE_TIMING_FILE := \\$\\(CURDIR\\)/build/release-timings\\.tsv" OR
+   NOT makefile MATCHES "TIMED := ./scripts/run_timed\\.sh")
+    message(FATAL_ERROR "release must expose the lifecycle timing output through scripts/run_timed.sh")
 endif()

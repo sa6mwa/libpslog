@@ -23,10 +23,10 @@ run_target() {
     archive_target="$2"
 
     printf '\n== %s ==\n' "$preset"
-    cmake --preset "$preset"
-    cmake --build --preset "$preset"
-    ctest --preset "$preset"
-    cmake --build "build/$preset" --target "$archive_target"
+    "$repo_root/scripts/run_timed.sh" "${preset}:configure" cmake --preset "$preset"
+    "$repo_root/scripts/run_timed.sh" "${preset}:build" cmake --build --preset "$preset"
+    "$repo_root/scripts/run_timed.sh" "${preset}:test" ctest --preset "$preset"
+    "$repo_root/scripts/run_timed.sh" "${preset}:package" cmake --build "build/$preset" --target "$archive_target"
 }
 
 run_build_only_target() {
@@ -34,9 +34,9 @@ run_build_only_target() {
     archive_target="$2"
 
     printf '\n== %s ==\n' "$preset"
-    cmake --preset "$preset"
-    cmake --build --preset "$preset"
-    cmake --build "build/$preset" --target "$archive_target"
+    "$repo_root/scripts/run_timed.sh" "${preset}:configure" cmake --preset "$preset"
+    "$repo_root/scripts/run_timed.sh" "${preset}:build" cmake --build --preset "$preset"
+    "$repo_root/scripts/run_timed.sh" "${preset}:package" cmake --build "build/$preset" --target "$archive_target"
 }
 
 require_command cmake
@@ -57,8 +57,8 @@ done
 
 cd "$repo_root"
 
-cmake --preset host
-cmake --build build/host --target package-clean-dist
+"$repo_root/scripts/run_timed.sh" release-matrix:host-configure cmake --preset host
+"$repo_root/scripts/run_timed.sh" release-matrix:clean-dist cmake --build build/host --target package-clean-dist
 
 run_target x86_64-linux-gnu-release package-archive
 run_target x86_64-linux-musl-release package-archive
@@ -73,15 +73,15 @@ else
     printf 'Skipping Darwin release target: osxcross arm64 clang not available under %s\n' "$darwin_bin"
 fi
 
-cmake --build build/host --target package-single-header
-cmake --build build/host --target package-source
-cmake -DPSLOG_ROOT="$repo_root" -DPSLOG_BINARY_DIR="$repo_root/build/host" -DPSLOG_VERSION="$(./lua/scripts/release_version.sh)" -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
-make release-lua-artifacts
-cmake --build build/host --target package-checksums
+"$repo_root/scripts/run_timed.sh" release-matrix:single-header cmake --build build/host --target package-single-header
+"$repo_root/scripts/run_timed.sh" release-matrix:source-archive cmake --build build/host --target package-source
+"$repo_root/scripts/run_timed.sh" release-matrix:source-smoke cmake -DPSLOG_ROOT="$repo_root" -DPSLOG_BINARY_DIR="$repo_root/build/host" -DPSLOG_VERSION="$(./lua/scripts/release_version.sh)" -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
+"$repo_root/scripts/run_timed.sh" release-matrix:lua-artifacts make release-lua-artifacts
+"$repo_root/scripts/run_timed.sh" release-matrix:checksums cmake --build build/host --target package-checksums
 if [ -n "$darwin_toolchain" ]; then
-    ./scripts/verify_release_privacy.sh --build-dir build/host --target-id x86_64-linux-gnu --darwin-build-dir build/arm64-apple-darwin-release
+    "$repo_root/scripts/run_timed.sh" release-matrix:privacy ./scripts/verify_release_privacy.sh --build-dir build/host --target-id x86_64-linux-gnu --darwin-build-dir build/arm64-apple-darwin-release
 else
-    ./scripts/verify_release_privacy.sh --build-dir build/host --target-id x86_64-linux-gnu
+    "$repo_root/scripts/run_timed.sh" release-matrix:privacy ./scripts/verify_release_privacy.sh --build-dir build/host --target-id x86_64-linux-gnu
 fi
 
 printf '\nRelease matrix completed successfully.\n'

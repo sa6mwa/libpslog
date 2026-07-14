@@ -73,6 +73,8 @@ FUZZ_TIME ?= 30
 FUZZ_LONG_TIME ?= 300
 GO_BENCH_COUNT ?= 1
 ELEVATORPITCH_ARGS ?=
+TIMED := ./scripts/run_timed.sh
+RELEASE_TIMING_FILE := $(CURDIR)/build/release-timings.tsv
 
 .PHONY: \
 	help \
@@ -173,12 +175,14 @@ help:
 		'make release-matrix  Build/test/package the release target matrix.' \
 		'make finalize-slice  Run formatting and focused local verification.' \
 		'make prerelease      Run deterministic local pre-release checks.' \
-		'make release         Clean, then run the same proof graph as prerelease.' \
+		'make release         Clean, run prerelease proof, and write build/release-timings.tsv.' \
 		'make prerelease-hardening Run prerelease plus the long AFL++ fuzz pass.' \
 		'make print-release-version Print the version used by release artifacts.' \
+		'make release-lua-artifacts Build the standalone Lua release artifacts.' \
 		'make lua-rock        Install a local C SDK and build the Lua module into build/luarocks.' \
 		'make lua-env         Print shell exports for the repo-local Lua rock.' \
 		'make lua-test        Run the Lua binding smoke tests.' \
+		'make prepare-gobencher-data Regenerate deterministic Go benchmark inputs.' \
 		'make clean           Remove build/ and dist/ generated artifacts.' \
 		'make clean-dist      Remove dist/ release artifacts.'
 
@@ -329,10 +333,10 @@ finalize-slice: format clangd build-host
 	ctest --test-dir build/$(HOST_PRESET) -R '^(pslog_tests|pslog_single_header_tests|example_integration_test|public_symbol_visibility_test|darwin_linker_route_test)$$' --output-on-failure
 
 release-pipeline:
-	$(MAKE) format
-	$(MAKE) test-all
-	$(MAKE) lua-test
-	$(MAKE) release-matrix
+	$(TIMED) format $(MAKE) format
+	$(TIMED) test-all $(MAKE) test-all
+	$(TIMED) lua-test $(MAKE) lua-test
+	$(TIMED) release-matrix $(MAKE) release-matrix
 
 prerelease: release-pipeline
 
@@ -431,8 +435,9 @@ $(GO_CKVFMT_WRAPPERS): $(GO_PRODUCTION_DATASET) $(LUA_SDK_STAMP) gobencher/cmd/g
 	cd gobencher/benchmark && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ../cmd/gen_ckvfmt_wrappers
 
 release:
-	$(MAKE) clean
-	$(MAKE) release-pipeline
+	PKT_TIMING_FILE="$(RELEASE_TIMING_FILE)" $(TIMED) release-clean $(MAKE) clean
+	PKT_TIMING_FILE="$(RELEASE_TIMING_FILE)" $(TIMED) release-pipeline $(MAKE) release-pipeline
+	@printf 'Release timings: %s\n' "$(RELEASE_TIMING_FILE)"
 
 clean:
 	./scripts/clean.sh

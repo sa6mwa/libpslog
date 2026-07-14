@@ -324,7 +324,10 @@ make release-matrix
 generated state first. `make release` cleans first and then runs that exact
 same proof graph; it is the final local release gate.
 `make prerelease-hardening` adds the explicit long AFL++ fuzz tier to that
-proof graph.
+proof graph. `make release` writes a tab-separated phase timing report to
+`build/release-timings.tsv`; its matrix entries distinguish configure, build,
+QEMU-backed test, packaging, source smoke, Lua artifacts, checksums, and
+privacy verification.
 
 That script runs, for every shipped Linux target:
 

@@ -515,6 +515,17 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME run_timed_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_timed_test.cmake
+    )
+    set_tests_properties(run_timed_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME public_symbol_visibility_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
