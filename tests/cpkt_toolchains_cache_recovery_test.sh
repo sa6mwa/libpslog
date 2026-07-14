@@ -15,6 +15,7 @@ touch "$stage_root/.ready"
 tar -C "$fixture_root/stage" -cJf "$archive_source" fixture
 expected_sha=$(sha256_file "$archive_source")
 export CPKT_TOOLCHAIN_CACHE="$fixture_root/cache"
+unset CPKT_TOOLCHAIN_LOCK_TIMEOUT
 
 bootlin_values() {
   printf 'test|fixture|%s|fake|sysroot|%s\n' "$expected_sha" "$CPKT_TOOLCHAIN_CACHE/roots/fixture"
@@ -24,6 +25,10 @@ ready_checks=0
 reject_lock=0
 allow_unlocked_ready=0
 flock() {
+  if [[ "${1:-}" == '-w' ]]; then
+    [[ "${2:-}" == 600 ]] || { printf 'toolchain cache lock did not use the lifecycle timeout\n' >&2; return 1; }
+    shift 2
+  fi
   [[ "$reject_lock" -eq 0 ]] || { printf 'ready toolchain unexpectedly acquired a cache lock\n' >&2; return 1; }
   if [[ "${1:-}" == '-u' ]]; then
     lock_held=0

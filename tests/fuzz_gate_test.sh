@@ -11,7 +11,6 @@ repo_root=$fixture_root
 mkdir -p "$repo_root/scripts" "$repo_root/fuzz/corpus" "$repo_root/build/fuzz"
 touch "$repo_root/fuzz/corpus/seed"
 mkdir -p "$repo_root/sysroot/lib"
-printf '%s\n' 'CMAKE_SYSROOT:PATH='"$repo_root"'/sysroot' >"$repo_root/build/fuzz/CMakeCache.txt"
 touch "$repo_root/sysroot/lib/ld-linux-x86-64.so.2"
 chmod +x "$repo_root/sysroot/lib/ld-linux-x86-64.so.2"
 
@@ -33,6 +32,10 @@ make_fake_fuzzer() {
 printf '%s\n' '#!/usr/bin/env bash' 'printf "afl_fuzz=%s\\n" "$(dirname "$0")/../fake-afl-fuzz"' \
   >"$repo_root/scripts/cpkt-aflpp.sh"
 chmod +x "$repo_root/scripts/cpkt-aflpp.sh"
+
+printf '%s\n' '#!/usr/bin/env bash' 'printf "sysroot=%s\\n" "$(dirname "$0")/../sysroot"' \
+  >"$repo_root/scripts/cpkt-toolchains.sh"
+chmod +x "$repo_root/scripts/cpkt-toolchains.sh"
 
 printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
   '[[ "$1" == "--loader" ]] || exit 2' \

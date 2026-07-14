@@ -26,6 +26,11 @@ endif()
 if(NOT dependency_helper MATCHES "file\\(RENAME[ \\t]+\"\\$\\{temp_path\\}\"[ \\t]+\"\\$\\{archive_path\\}\"")
     message(FATAL_ERROR "dependency cache helper does not atomically publish verified archives")
 endif()
+if(dependency_helper MATCHES "EXPECTED_HASH" OR
+   NOT dependency_helper MATCHES "foreach\\(download_attempt[ \\t]+RANGE[ \\t]+1[ \\t]+3\\)" OR
+   NOT dependency_helper MATCHES "file\\(SHA256[ \\t]+\"\\$\\{temp_path\\}\"[ \\t]+downloaded_digest\\)")
+    message(FATAL_ERROR "dependency downloads must retry and explicitly verify temporary archives before publication")
+endif()
 if(NOT dependency_helper MATCHES "set\\(stage_lock_path[ \\t]+\"\\$\\{CMAKE_SOURCE_DIR\\}/\\.cache/deps/locks/" OR
    NOT dependency_helper MATCHES "file\\(LOCK[ \\t]+\"\\$\\{stage_lock_path\\}\"[ \\t]+GUARD[ \\t]+FUNCTION")
     message(FATAL_ERROR "dependency staging does not hold a per-stage lock through extraction")

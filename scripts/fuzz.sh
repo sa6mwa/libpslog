@@ -5,7 +5,7 @@ set -euo pipefail
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 
 main() {
-  local mode=${1:-} seconds=${2:-} description afl_fuzz corpus output failure_input sysroot loader library_path
+  local mode=${1:-} seconds=${2:-} description toolchain_description afl_fuzz corpus output failure_input sysroot loader library_path
 
   case "$mode" in smoke|run|long) ;; *) printf 'usage: %s {smoke|run|long} seconds\n' "$0" >&2; return 2;; esac
   case "$seconds" in ''|*[!0-9]*) printf 'fuzz duration must be a positive integer number of seconds\n' >&2; return 2;; esac
@@ -17,8 +17,9 @@ main() {
   description=$(./scripts/cpkt-aflpp.sh discover)
   afl_fuzz=$(sed -n 's/^afl_fuzz=//p' <<<"$description" | tail -n 1)
   [[ -x "$afl_fuzz" ]] || { printf 'pinned AFL++ resolver did not provide afl-fuzz\n' >&2; return 1; }
-  sysroot=$(sed -n 's/^CMAKE_SYSROOT:[^=]*=//p' "$repo_root/build/fuzz/CMakeCache.txt" | tail -n 1)
-  [[ -n "$sysroot" ]] || { printf 'fuzz target is missing its configured Bootlin sysroot\n' >&2; return 1; }
+  toolchain_description=$(./scripts/cpkt-toolchains.sh discover x86_64-linux-gnu)
+  sysroot=$(sed -n 's/^sysroot=//p' <<<"$toolchain_description" | tail -n 1)
+  [[ -d "$sysroot" ]] || { printf 'pinned Bootlin resolver did not provide the native fuzz sysroot\n' >&2; return 1; }
   loader=$("$repo_root/scripts/run_sysroot_binary.sh" --loader --sysroot "$sysroot")
   library_path="$sysroot/lib:$sysroot/usr/lib:$sysroot/lib64:$sysroot/usr/lib64"
 

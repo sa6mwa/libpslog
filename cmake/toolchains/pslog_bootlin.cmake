@@ -101,6 +101,10 @@ function(pslog_configure_bootlin_toolchain target_id)
     set(CMAKE_ADDR2LINE "${bootlin_addr2line}" CACHE FILEPATH "" FORCE)
     set(CMAKE_READELF "${bootlin_readelf}" CACHE FILEPATH "" FORCE)
     set(CMAKE_SYSROOT "${bootlin_sysroot}" CACHE PATH "" FORCE)
+    set(PSLOG_BOOTLIN_ROOT "${bootlin_root}" CACHE PATH
+        "Pinned Bootlin collection root selected by the active toolchain" FORCE)
+    set(PSLOG_BOOTLIN_SYSROOT "${bootlin_sysroot}" CACHE PATH
+        "Pinned Bootlin sysroot selected by the active toolchain" FORCE)
     set(CMAKE_FIND_ROOT_PATH "${bootlin_sysroot}" "${bootlin_root}" CACHE STRING "" FORCE)
     set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER CACHE STRING "" FORCE)
     set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY CACHE STRING "" FORCE)

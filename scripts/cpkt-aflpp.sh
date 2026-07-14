@@ -15,34 +15,57 @@ cache() {
   elif [[ -n "${HOME:-}" ]]; then printf '%s/.cache/c.pkt.systems/toolchains\n' "$HOME"
   else die 'HOME, XDG_CACHE_HOME, or CPKT_TOOLCHAIN_CACHE is required'; fi
 }
-root() { printf '%s/roots/aflplusplus-%s-x86_64-linux-gnu\n' "$(cache)" "$version"; }
 value() { sed -n "s/^$1=//p" <<<"$2" | tail -1; }
+collection_id() {
+  local description=$1 target bootlin_root sysroot root_name sysroot_relative identifier
+  target=$(value target "$description")
+  bootlin_root=$(value root "$description")
+  sysroot=$(value sysroot "$description")
+  [[ -n "$target" && -n "$bootlin_root" && -n "$sysroot" ]] || die 'Bootlin resolver did not report an AFL++ cache identity'
+  root_name=$(basename -- "$bootlin_root")
+  sysroot_relative=${sysroot#"$bootlin_root"/}
+  [[ "$sysroot_relative" != "$sysroot" ]] || die "Bootlin sysroot is outside its collection root: $sysroot"
+  identifier="$target-$root_name-${sysroot_relative//\//_}"
+  [[ "$identifier" =~ ^[A-Za-z0-9._-]+$ ]] || die "Bootlin collection identity contains unsupported characters: $identifier"
+  printf '%s\n' "$identifier"
+}
+root() { local identifier=$1; printf '%s/roots/aflplusplus-%s-%s\n' "$(cache)" "$version" "$identifier"; }
 ready() {
-  local resolved_root=$1
+  local resolved_root=$1 identifier=$2
   [[ -x "$resolved_root/bin/afl-fuzz" && -x "$resolved_root/bin/cpkt-afl-gcc" && -x "$resolved_root/bin/cpkt-afl-g++" &&
      -f "$resolved_root/lib/afl/afl-gcc-pass.so" && -f "$resolved_root/lib/afl/afl-compiler-rt.o" &&
-     -f "$resolved_root/.cpkt-aflpp-revision-$revision" ]]
+     -f "$resolved_root/.cpkt-aflpp-revision-$revision-$identifier" ]]
+}
+
+bootlin_description() {
+  [[ -x "$bootlin" ]] || die "Bootlin resolver missing: $bootlin"
+  "$bootlin" ensure x86_64-linux-gnu >/dev/null
+  "$bootlin" discover x86_64-linux-gnu
 }
 
 ensure() {
   [[ "$(uname -s)" = Linux ]] || die 'AFL++ GCC-plugin fuzzing is native Linux-only'
   case "$(uname -m)" in x86_64|amd64) ;; *) die "native x86_64 Linux is required; no cross, emulator, or QEMU runner is supported";; esac
-  local resolved_root cache_root archive description cc cxx bootlin_root tmp source download lock_path lock_fd
-  resolved_root=$(root); cache_root=$(cache); archive="$cache_root/archives/$archive_name"
-  ready "$resolved_root" && return
-  [[ -x "$bootlin" ]] || die "Bootlin resolver missing: $bootlin"
+  local resolved_root cache_root archive description identifier cc cxx bootlin_root tmp source download lock_path lock_fd lock_timeout
+  description=$(bootlin_description)
+  identifier=$(collection_id "$description")
+  resolved_root=$(root "$identifier"); cache_root=$(cache); archive="$cache_root/archives/$archive_name"
+  ready "$resolved_root" "$identifier" && return
   command -v flock >/dev/null 2>&1 || die 'flock is required to provision shared AFL++ safely'
   lock_path="$cache_root/locks/aflplusplus-${version}-x86_64-linux-gnu.lock"
+  lock_timeout=${CPKT_TOOLCHAIN_LOCK_TIMEOUT:-600}
+  [[ "$lock_timeout" =~ ^[1-9][0-9]*$ ]] || die 'CPKT_TOOLCHAIN_LOCK_TIMEOUT must be a positive integer number of seconds'
   mkdir -p "$cache_root/archives" "$cache_root/roots" "$(dirname "$lock_path")"
   exec {lock_fd}>"$lock_path"
-  flock "$lock_fd"
-  if ready "$resolved_root"; then
+  flock -w "$lock_timeout" "$lock_fd" || die "timed out waiting for shared toolchain lock: $lock_path"
+  description=$(bootlin_description)
+  identifier=$(collection_id "$description")
+  resolved_root=$(root "$identifier")
+  if ready "$resolved_root" "$identifier"; then
     flock -u "$lock_fd"
     exec {lock_fd}>&-
     return
   fi
-  "$bootlin" ensure x86_64-linux-gnu >/dev/null
-  description=$("$bootlin" discover x86_64-linux-gnu)
   cc=$(value cc "$description"); cxx=$(value cxx "$description"); bootlin_root=$(value root "$description")
   [[ -x "$cc" && -x "$cxx" && -f "$bootlin_root/include/gmp.h" ]] || die 'Bootlin GCC plugin headers are incomplete'
   if ! [[ -f "$archive" ]] || ! printf '%s  %s\n' "$archive_sha256" "$archive" | sha256sum -c - >/dev/null 2>&1; then
@@ -73,14 +96,14 @@ ensure() {
   )
   printf '#!/usr/bin/env bash\nexport AFL_PATH=%q\nexport AFL_CC=%q\nexec %q "$@"\n' "$resolved_root/lib/afl" "$cc" "$resolved_root/bin/afl-gcc-fast" > "$tmp/root/bin/cpkt-afl-gcc"
   printf '#!/usr/bin/env bash\nexport AFL_PATH=%q\nexport AFL_CC=%q\nexport AFL_CXX=%q\nexec %q "$@"\n' "$resolved_root/lib/afl" "$cc" "$cxx" "$resolved_root/bin/afl-g++-fast" > "$tmp/root/bin/cpkt-afl-g++"
-  chmod +x "$tmp/root/bin/cpkt-afl-gcc" "$tmp/root/bin/cpkt-afl-g++"; touch "$tmp/root/.cpkt-aflpp-revision-$revision"
-  ready "$tmp/root" || die 'incomplete AFL++ build'; rm -rf "$resolved_root"; mv "$tmp/root" "$resolved_root"; trap - EXIT HUP INT TERM; rm -rf "$tmp"
+  chmod +x "$tmp/root/bin/cpkt-afl-gcc" "$tmp/root/bin/cpkt-afl-g++"; touch "$tmp/root/.cpkt-aflpp-revision-$revision-$identifier"
+  ready "$tmp/root" "$identifier" || die 'incomplete AFL++ build'; rm -rf "$resolved_root"; mv "$tmp/root" "$resolved_root"; trap - EXIT HUP INT TERM; rm -rf "$tmp"
   flock -u "$lock_fd"
   exec {lock_fd}>&-
 }
 
-report() { ensure; local resolved_root=$(root); printf 'version=%s\ncache=%s\nsource=aflplusplus\nroot=%s\nafl_fuzz=%s\nafl_showmap=%s\ncc=%s\ncxx=%s\nhelper=%s\n' "$version" "$(cache)" "$resolved_root" "$resolved_root/bin/afl-fuzz" "$resolved_root/bin/afl-showmap" "$resolved_root/bin/cpkt-afl-gcc" "$resolved_root/bin/cpkt-afl-g++" "$resolved_root/lib/afl"; }
-env_out() { local description cc cxx resolved_root; ensure; description=$("$bootlin" discover x86_64-linux-gnu); cc=$(value cc "$description"); cxx=$(value cxx "$description"); resolved_root=$(root); printf 'export CPKT_AFLPP_ROOT=%q\nexport AFL_PATH=%q\nexport AFL_CC=%q\nexport AFL_CXX=%q\nexport CC=%q\nexport CXX=%q\n' "$resolved_root" "$resolved_root/lib/afl" "$cc" "$cxx" "$resolved_root/bin/cpkt-afl-gcc" "$resolved_root/bin/cpkt-afl-g++"; }
+report() { local description identifier resolved_root; ensure; description=$(bootlin_description); identifier=$(collection_id "$description"); resolved_root=$(root "$identifier"); printf 'version=%s\ncache=%s\nsource=aflplusplus\nroot=%s\nafl_fuzz=%s\nafl_showmap=%s\ncc=%s\ncxx=%s\nhelper=%s\n' "$version" "$(cache)" "$resolved_root" "$resolved_root/bin/afl-fuzz" "$resolved_root/bin/afl-showmap" "$resolved_root/bin/cpkt-afl-gcc" "$resolved_root/bin/cpkt-afl-g++" "$resolved_root/lib/afl"; }
+env_out() { local description identifier cc cxx resolved_root; ensure; description=$(bootlin_description); identifier=$(collection_id "$description"); cc=$(value cc "$description"); cxx=$(value cxx "$description"); resolved_root=$(root "$identifier"); printf 'export CPKT_AFLPP_ROOT=%q\nexport AFL_PATH=%q\nexport AFL_CC=%q\nexport AFL_CXX=%q\nexport CC=%q\nexport CXX=%q\n' "$resolved_root" "$resolved_root/lib/afl" "$cc" "$cxx" "$resolved_root/bin/cpkt-afl-gcc" "$resolved_root/bin/cpkt-afl-g++"; }
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   case "${1:-}" in
     ensure) [[ $# -eq 1 ]] || die 'usage: cpkt-aflpp.sh ensure'; ensure;;
