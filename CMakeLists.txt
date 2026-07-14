@@ -483,6 +483,24 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME cpkt_toolchains_cache_recovery_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cpkt_toolchains_cache_recovery_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cpkt_toolchains_cache_recovery_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME fuzz_gate_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz_gate_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(fuzz_gate_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "fuzz;local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME darwin_linker_route_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}

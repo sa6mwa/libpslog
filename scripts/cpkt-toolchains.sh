@@ -138,6 +138,13 @@ install_bootlin() {
   archive_dir="$(cache_root)/archives"
   archive="$archive_dir/$name.tar.xz"
   mkdir -p "$archive_dir" "$(cache_root)/roots"
+  if [[ -f "$archive" ]]; then
+    actual=$(sha256_file "$archive")
+    if [[ "$actual" != "$sha256" ]]; then
+      printf 'cpkt-toolchains: discarding corrupt cached archive: %s\n' "$archive" >&2
+      rm -f "$archive"
+    fi
+  fi
   if [[ ! -f "$archive" ]]; then
     tmp="$archive.tmp.$$"
     trap 'rm -f "$tmp"' EXIT HUP INT TERM
@@ -146,9 +153,6 @@ install_bootlin() {
     [[ "$actual" == "$sha256" ]] || die "checksum mismatch for $name.tar.xz: expected $sha256, got $actual"
     mv "$tmp" "$archive"
     trap - EXIT HUP INT TERM
-  else
-    actual=$(sha256_file "$archive")
-    [[ "$actual" == "$sha256" ]] || die "cached archive checksum mismatch for $archive: expected $sha256, got $actual"
   fi
   extract="$(cache_root)/roots/.extract-$name.$$"
   trap 'rm -rf "$extract"' EXIT HUP INT TERM
@@ -226,16 +230,22 @@ Commands:
 USAGE
 }
 
-case "${1:-}" in
-  -h|--help|'') usage ;;
-  targets) target_ids ;;
-  discover)
-    if [[ $# -eq 2 ]]; then report_target "$2"
-    elif [[ $# -eq 1 ]]; then while IFS= read -r target; do report_target "$target"; done < <(target_ids)
-    else die 'usage: cpkt-toolchains.sh discover [target]'; fi ;;
-  ensure)
-    [[ $# -eq 2 ]] || die 'usage: cpkt-toolchains.sh ensure <target|all>'
-    if [[ "$2" == all ]]; then while IFS= read -r target; do if is_linux_target "$target"; then ensure_target "$target"; else report_target "$target"; fi; done < <(target_ids); else ensure_target "$2"; fi ;;
-  env) [[ $# -eq 2 ]] || die 'usage: cpkt-toolchains.sh env <target>'; print_env "$2" ;;
-  *) die "unknown command: $1" ;;
-esac
+main() {
+  case "${1:-}" in
+    -h|--help|'') usage ;;
+    targets) target_ids ;;
+    discover)
+      if [[ $# -eq 2 ]]; then report_target "$2"
+      elif [[ $# -eq 1 ]]; then while IFS= read -r target; do report_target "$target"; done < <(target_ids)
+      else die 'usage: cpkt-toolchains.sh discover [target]'; fi ;;
+    ensure)
+      [[ $# -eq 2 ]] || die 'usage: cpkt-toolchains.sh ensure <target|all>'
+      if [[ "$2" == all ]]; then while IFS= read -r target; do if is_linux_target "$target"; then ensure_target "$target"; else report_target "$target"; fi; done < <(target_ids); else ensure_target "$2"; fi ;;
+    env) [[ $# -eq 2 ]] || die 'usage: cpkt-toolchains.sh env <target>'; print_env "$2" ;;
+    *) die "unknown command: $1" ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
