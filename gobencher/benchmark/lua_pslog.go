@@ -1,8 +1,8 @@
 package benchmark
 
 /*
-#cgo CFLAGS: -O3 -DNDEBUG -I${SRCDIR}/../../include -I${SRCDIR}/../../build/host/generated/include -I/usr/local/include
-#cgo LDFLAGS: ${SRCDIR}/../../build/host/libpslog.a /usr/local/lib/liblua.a -lm -ldl -pthread
+#cgo CFLAGS: -O3 -DNDEBUG -I${SRCDIR}/../../include -I${SRCDIR}/../../build/host/generated/include -I${SRCDIR}/../../build/lua-host/include
+#cgo LDFLAGS: ${SRCDIR}/../../build/host/libpslog.a ${SRCDIR}/../../build/lua-host/lib/liblua.a -lm -ldl -pthread
 
 #include <limits.h>
 #include <stdlib.h>
