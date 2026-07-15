@@ -15,12 +15,12 @@ file(REMOVE_RECURSE "${test_root}")
 file(MAKE_DIRECTORY "${fake_bin}")
 file(MAKE_DIRECTORY "${fake_osxcross_root}/SDK/MacOSX15.sdk/usr/include")
 
-foreach(tool clang ar ranlib ld install_name_tool strip)
+foreach(tool clang ar ranlib ld install_name_tool strip otool)
     set(tool_path "${fake_bin}/${fake_host}-${tool}")
     if(tool STREQUAL "clang")
         file(WRITE "${tool_path}"
 "#!/bin/sh
-expected='-fuse-ld=${fake_ld}'
+expected='--ld-path=${fake_ld}'
 output=''
 found=0
 previous=''
@@ -59,18 +59,24 @@ if(NOT CMAKE_LINKER STREQUAL "${fake_ld}")
         "expected: ${fake_ld}\n"
         "actual: ${CMAKE_LINKER}")
 endif()
+if(NOT CPKT_OTOOL STREQUAL "${fake_bin}/${fake_host}-otool")
+    message(FATAL_ERROR
+        "Darwin toolchain did not select target otool\n"
+        "expected: ${fake_bin}/${fake_host}-otool\n"
+        "actual: ${CPKT_OTOOL}")
+endif()
 
 foreach(linker_flags
         CMAKE_EXE_LINKER_FLAGS
         CMAKE_SHARED_LINKER_FLAGS
         CMAKE_MODULE_LINKER_FLAGS)
-    if(NOT "${${linker_flags}}" MATCHES "-fuse-ld=${fake_ld}")
+    if(NOT "${${linker_flags}}" MATCHES "--ld-path=${fake_ld}")
         message(FATAL_ERROR
             "Darwin toolchain did not force ${linker_flags} through target ld: ${${linker_flags}}")
     endif()
-    if("${${linker_flags}}" MATCHES "--ld-path=")
+    if("${${linker_flags}}" MATCHES "-fuse-ld=")
         message(FATAL_ERROR
-            "Darwin toolchain still uses --ld-path instead of lifecycle -fuse-ld: ${${linker_flags}}")
+            "Darwin toolchain still uses deprecated absolute -fuse-ld: ${${linker_flags}}")
     endif()
 endforeach()
 

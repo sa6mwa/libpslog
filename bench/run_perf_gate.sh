@@ -20,7 +20,7 @@ run_go_bench() {
     (
         trap 'rm -rf "$tmpcache"' EXIT
         cd "$repo_root/gobencher"
-        GOCACHE="$tmpcache" go test ./benchmark -run '^$' -bench "$pattern" -benchmem -benchtime="$PSLOG_PERF_GO_BENCHTIME" -count=1
+        GOCACHE="$tmpcache" go test -exec "$host_executor" ./benchmark -run '^$' -bench "$pattern" -benchmem -benchtime="$PSLOG_PERF_GO_BENCHTIME" -count=1
     ) | tee "$out_file"
 }
 
@@ -37,6 +37,22 @@ require_command ctest
 require_command go
 require_command awk
 require_command mktemp
+
+if [[ -z "${CC:-}" || ! -x "${CC}" ]]; then
+    printf 'perf gate requires CC to name the configured Bootlin C compiler\n' >&2
+    exit 1
+fi
+if [[ -z "${CXX:-}" || ! -x "${CXX}" ]]; then
+    printf 'perf gate requires CXX to name the configured Bootlin C++ compiler\n' >&2
+    exit 1
+fi
+export CC CXX
+
+host_executor="${PSLOG_HOST_EXECUTOR:-$repo_root/scripts/run_host_binary.sh}"
+if [[ ! -x "$host_executor" ]]; then
+    printf 'perf gate requires PSLOG_HOST_EXECUTOR to name the native Bootlin sysroot runner\n' >&2
+    exit 1
+fi
 
 PSLOG_PERF_C_ITERS="${PSLOG_PERF_C_ITERS:-200000}"
 PSLOG_PERF_C_TOLERANCE="${PSLOG_PERF_C_TOLERANCE:-0.50}"
@@ -61,7 +77,7 @@ ctest --preset host
 make lua-rock
 
 printf '\n== pure C regression gate ==\n'
-run_maybe_pinned ./build/host/pslog_bench "$PSLOG_PERF_C_ITERS" all | tee "$pure_c_out"
+run_maybe_pinned "$host_executor" ./build/host/pslog_bench "$PSLOG_PERF_C_ITERS" all | tee "$pure_c_out"
 "$repo_root/bench/check_perf_baseline.sh" "$c_baseline" "$pure_c_out" \
   "$PSLOG_PERF_C_TOLERANCE" ns/op \
   console_api \
@@ -110,7 +126,7 @@ tmpcache="$(mktemp -d)"
 (
     trap 'rm -rf "$tmpcache"' EXIT
     cd "$repo_root/gobencher"
-    GOCACHE="$tmpcache" go test ./benchmark -run '^Test(C(LoggerWithPrepared|LoggerPublicWrites|CPublicPreparedParityFixed|CProductionPreparedOutputParity)|CKVFmt(Fixed|Production)OutputParity|LuaPreparedBenchmarkBridgeMatchesRawRun|LuaPreparedTableBenchmarkBridgeMatchesRawRun)$' -count=1
+    GOCACHE="$tmpcache" go test -exec "$host_executor" ./benchmark -run '^Test(C(LoggerWithPrepared|LoggerPublicWrites|CPublicPreparedParityFixed|CProductionPreparedOutputParity)|CKVFmt(Fixed|Production)OutputParity|LuaPreparedBenchmarkBridgeMatchesRawRun|LuaPreparedTableBenchmarkBridgeMatchesRawRun)$' -count=1
 )
 
 printf '\n== Lua regression gate ==\n'

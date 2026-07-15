@@ -6,51 +6,102 @@ repo_root=$(CDPATH= cd -- "${script_dir}/../.." && pwd)
 build_dir="${1:-${repo_root}/build/host}"
 version="${2:-0.0.0}"
 rock_tree="${3:-${repo_root}/build/luarocks}"
+sdk_prefix="${4:-${repo_root}/build/lua-sdk}"
 out_dir="${repo_root}/build/lua-interop"
 test_bin="${out_dir}/pslog_lua_interop_tests"
 installed_consumer_src="${out_dir}/installed_rock_consumer.c"
 installed_consumer_bin="${out_dir}/installed_rock_consumer"
-cc_bin="${CC:-cc}"
+if [ -n "${CC:-}" ]; then
+    cc_bin="${CC}"
+else
+    cache_file="${build_dir}/CMakeCache.txt"
+    if [ ! -f "${cache_file}" ]; then
+        printf 'lua interop embedder test: missing configured Bootlin compiler cache: %s\n' "${cache_file}" >&2
+        exit 1
+    fi
+    cc_bin=$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' "${cache_file}" | tail -n 1)
+fi
+if [ -z "${cc_bin}" ] || [ ! -x "${cc_bin}" ]; then
+    printf 'lua interop embedder test: configured C compiler is unavailable: %s\n' "${cc_bin:-<empty>}" >&2
+    exit 1
+fi
 cflags="${CFLAGS:-}"
 ldflags="${LDFLAGS:-}"
+lua_stage_dir="${repo_root}/build/lua-host"
+lua_include_dir="${lua_stage_dir}/include"
+lua_lib_dir="${lua_stage_dir}/lib"
+sdk_include_dir="${sdk_prefix}/include"
+sdk_lib_dir="${sdk_prefix}/lib"
+cache_file="${build_dir}/CMakeCache.txt"
+sdk_shared_lib=
+for candidate in "${sdk_lib_dir}/libpslog.so" "${sdk_lib_dir}/libpslog.dylib"; do
+    if [ -e "${candidate}" ]; then
+        sdk_shared_lib="${candidate}"
+        break
+    fi
+done
+
+run_linked_binary() {
+    if [ -f "${cache_file}" ] && sed -n 's/^CMAKE_SYSROOT:[^=]*=//p' "${cache_file}" | grep -q .; then
+        "${repo_root}/scripts/run_sysroot_binary.sh" \
+            --build-dir "${build_dir}" \
+            --library-path "${sdk_lib_dir}" \
+            "$@"
+    else
+        LD_LIBRARY_PATH="${sdk_lib_dir}:${LD_LIBRARY_PATH:-}" \
+        DYLD_LIBRARY_PATH="${sdk_lib_dir}:${DYLD_LIBRARY_PATH:-}" \
+            "$@"
+    fi
+}
+
+run_installed_consumer() {
+    installed_core_dir=$1
+    if [ -f "${cache_file}" ] && sed -n 's/^CMAKE_SYSROOT:[^=]*=//p' "${cache_file}" | grep -q .; then
+        "${repo_root}/scripts/run_sysroot_binary.sh" \
+            --build-dir "${build_dir}" \
+            --library-path "${sdk_lib_dir}" \
+            --library-path "${installed_core_dir}" \
+            "${installed_consumer_bin}"
+    else
+        LD_LIBRARY_PATH="${sdk_lib_dir}:${installed_core_dir}:${LD_LIBRARY_PATH:-}" \
+        DYLD_LIBRARY_PATH="${sdk_lib_dir}:${installed_core_dir}:${DYLD_LIBRARY_PATH:-}" \
+            "${installed_consumer_bin}"
+    fi
+}
 
 mkdir -p "${out_dir}"
 
-lua_cflags=""
-lua_libs=""
-if command -v pkg-config >/dev/null 2>&1; then
-    if pkg-config --exists lua5.5; then
-        lua_cflags=$(pkg-config --cflags lua5.5)
-        lua_libs=$(pkg-config --libs lua5.5)
-    fi
-fi
-
-if [ -z "${lua_cflags}" ] && [ -f /usr/local/include/lua.h ]; then
-    lua_cflags="-I/usr/local/include"
-fi
-if [ -z "${lua_libs}" ] && [ -f /usr/local/lib/liblua.a ]; then
-    lua_libs="/usr/local/lib/liblua.a -lm -ldl"
-fi
-
-if [ -z "${lua_cflags}" ] || [ -z "${lua_libs}" ]; then
-    printf 'lua interop embedder test: missing Lua C headers or library\n' >&2
+if [ ! -f "${lua_include_dir}/lua.h" ] || [ ! -f "${lua_lib_dir}/liblua.a" ]; then
+    printf 'lua interop embedder test: missing staged Lua 5.5 C development files; run make lua-rock first\n' >&2
     exit 1
 fi
+if [ ! -f "${sdk_include_dir}/pslog.h" ] || [ -z "${sdk_shared_lib}" ]; then
+    printf 'lua interop embedder test: missing installed local libpslog SDK; run make lua-rock first\n' >&2
+    exit 1
+fi
+case "$(uname -s)" in
+    Darwin)
+        lua_dynamic_loader_libs=""
+        ;;
+    *)
+        lua_dynamic_loader_libs="-ldl"
+        ;;
+esac
+lua_cflags="-I${lua_include_dir}"
+lua_libs="-L${lua_lib_dir} -llua -lm ${lua_dynamic_loader_libs}"
 
 "${cc_bin}" -std=c99 -Wall -Wextra -Werror ${cflags} \
     -D_POSIX_C_SOURCE=200809L \
     -DPSLOG_VERSION_STRING=\"${version}\" \
+    -I"${sdk_include_dir}" \
     -I"${repo_root}/include" \
-    -I"${build_dir}/generated/include" \
     ${lua_cflags} \
     "${repo_root}/tests/lua_interop_embedder_test.c" \
     "${repo_root}/lua/src/pslog_lua.c" \
-    -L"${build_dir}" -lpslog ${lua_libs} -pthread ${ldflags} \
+    -L"${sdk_lib_dir}" -lpslog ${lua_libs} -pthread ${ldflags} \
     -o "${test_bin}"
 
-LD_LIBRARY_PATH="${build_dir}:${LD_LIBRARY_PATH:-}" \
-DYLD_LIBRARY_PATH="${build_dir}:${DYLD_LIBRARY_PATH:-}" \
-    "${test_bin}"
+run_linked_binary "${test_bin}"
 
 installed_header=$(find "${rock_tree}/share/lua" -name pslog_lua.h -type f | head -n 1)
 if [ -z "${installed_header}" ]; then
@@ -64,25 +115,17 @@ if [ -z "${installed_core}" ]; then
     exit 1
 fi
 
-cat >"${installed_consumer_src}" <<'EOF'
-#include <pslog_lua.h>
-
-int main(void) {
-  return pslog_lua_is_logger(NULL, 0) == 0 ? 0 : 1;
-}
-EOF
+installed_consumer_src="${repo_root}/tests/lua_interop_installed_consumer.c"
 
 "${cc_bin}" -std=c99 -Wall -Wextra -Werror ${cflags} \
     -I"${installed_header_dir}" \
+    -I"${sdk_include_dir}" \
     -I"${repo_root}/include" \
-    -I"${build_dir}/generated/include" \
     ${lua_cflags} \
     "${installed_consumer_src}" \
-    "${installed_core}" -L"${build_dir}" -lpslog ${lua_libs} -pthread ${ldflags} \
-    -Wl,-rpath,"${build_dir}" \
+    "${installed_core}" -L"${sdk_lib_dir}" -lpslog ${lua_libs} -pthread ${ldflags} \
+    -Wl,-rpath,"${sdk_lib_dir}" \
     -Wl,-rpath,"$(dirname "${installed_core}")" \
     -o "${installed_consumer_bin}"
 
-LD_LIBRARY_PATH="${build_dir}:$(dirname "${installed_core}"):${LD_LIBRARY_PATH:-}" \
-DYLD_LIBRARY_PATH="${build_dir}:$(dirname "${installed_core}"):${DYLD_LIBRARY_PATH:-}" \
-    "${installed_consumer_bin}"
+run_installed_consumer "$(dirname "${installed_core}")"

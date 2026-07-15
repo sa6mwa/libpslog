@@ -1,3 +1,6 @@
+# Host-editor configuration only.  It analyses the native debug compile database
+# for project-owned public C headers and sources; it is not a build compiler,
+# cross-target ABI checker, package verifier, or release dependency.
 CompileFlags:
   CompilationDatabase: build/debug
   Remove:

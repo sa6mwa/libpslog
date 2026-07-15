@@ -10,18 +10,23 @@ Build it in normal library mode:
 cmake --preset host
 cmake --build --preset host
 cd examples
-cc -I../build/host/generated/include -I../include \
+"$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
   -o example example.c ../build/host/libpslog.a -pthread
 ./example
 ```
+
+The compiler path above comes from the configured host CMake cache. Use that
+compiler for source-tree examples so the example matches the configured host
+build. For extracted cross-target SDKs, use the compiler selected for that SDK
+target.
 
 Build it in single-header mode:
 
 ```sh
 cmake --preset host
-cmake --build --preset package-single-header
+cmake --build ../build/host --target package-single-header
 cd examples
-cc -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
+"$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
   -I../build/host/generated/include \
   -o example example.c -pthread
 ./example

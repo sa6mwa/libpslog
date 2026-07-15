@@ -46,8 +46,8 @@ build = {
         "_POSIX_C_SOURCE=200809L",
       },
       incdirs = {
-        "include",
         "$(LIBPSLOG_INCDIR)",
+        "include",
       },
       libdirs = {
         "$(LIBPSLOG_LIBDIR)",

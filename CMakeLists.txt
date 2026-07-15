@@ -4,10 +4,10 @@ include(cmake/pslog_version.cmake)
 
 project(libpslog VERSION ${PSLOG_PROJECT_VERSION_CORE} LANGUAGES C)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(PSLOG_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/include")
 file(MAKE_DIRECTORY "${PSLOG_GENERATED_INCLUDE_DIR}")
@@ -37,6 +37,18 @@ function(pslog_configure_c_target target)
             -Wextra
             -Wpedantic
             -pedantic-errors
+            -Werror
+        )
+    endif()
+endfunction()
+
+function(pslog_configure_project_warnings target)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(${target} PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -Werror
         )
     endif()
 endfunction()
@@ -52,47 +64,7 @@ function(pslog_enable_coverage_if_requested target)
     endif()
 endfunction()
 
-function(pslog_assert_fuzz_toolchain_supported)
-    set(fuzz_probe_dir "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/fuzz-toolchain-probe")
-    set(fuzz_probe_source "${fuzz_probe_dir}/probe.c")
-    set(fuzz_probe_binary "${fuzz_probe_dir}/probe")
-
-    file(MAKE_DIRECTORY "${fuzz_probe_dir}")
-    file(WRITE "${fuzz_probe_source}" [=[
-int LLVMFuzzerTestOneInput(const unsigned char *data, unsigned long size) {
-    (void)data;
-    (void)size;
-    return 0;
-}
-]=])
-
-    execute_process(
-        COMMAND "${CMAKE_C_COMPILER}"
-            -v
-            -fsanitize=fuzzer,address
-            -fno-omit-frame-pointer
-            "${fuzz_probe_source}"
-            -o "${fuzz_probe_binary}"
-        RESULT_VARIABLE fuzz_probe_result
-        OUTPUT_VARIABLE fuzz_probe_stdout
-        ERROR_VARIABLE fuzz_probe_stderr
-    )
-
-    if(NOT fuzz_probe_result EQUAL 0)
-        message(FATAL_ERROR
-            "PSLOG_BUILD_FUZZ=ON requires a C toolchain that can link -fsanitize=fuzzer,address. "
-            "The selected compiler is '${CMAKE_C_COMPILER}'. Install the matching compiler-rt/libFuzzer runtime "
-            "for this Clang toolchain or use a Clang toolchain that provides those libraries.\n"
-            "clang output:\n${fuzz_probe_stdout}\n${fuzz_probe_stderr}")
-    endif()
-endfunction()
-
 find_program(CLANG_FORMAT_BIN NAMES clang-format)
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    pkg_check_modules(PSLOG_LUA QUIET lua5.5)
-endif()
-
 file(GLOB_RECURSE PSLOG_FORMAT_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp
@@ -136,9 +108,37 @@ add_custom_target(format DEPENDS clang-format)
 option(PSLOG_BUILD_TESTS "Build unit tests" ON)
 option(PSLOG_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(PSLOG_BUILD_FUZZ "Build fuzz targets" OFF)
+option(PSLOG_BUILD_LUA "Enable the staged Lua facade CTest" OFF)
 option(PSLOG_BENCHMARK_WITH_LIBLOGGER "Enable optional benchmark-only liblogger comparisons" OFF)
 option(PSLOG_BENCHMARK_WITH_QUILL "Enable optional benchmark-only Quill comparisons" OFF)
 option(PSLOG_ENABLE_COVERAGE "Build test targets with gcov coverage instrumentation" OFF)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/pslog_dependencies.cmake")
+set(PSLOG_DEPENDENCY_MODE "bundled-sdk" CACHE STRING
+    "Dependency resolution mode used by lifecycle presets")
+set_property(CACHE PSLOG_DEPENDENCY_MODE PROPERTY STRINGS bundled-sdk)
+
+set(PSLOG_LUA_STAGE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/build/lua-host" CACHE PATH
+    "Repository-local staged Lua 5.5 development root")
+set(PSLOG_LUA_SDK_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/build/lua-sdk" CACHE PATH
+    "Repository-local installed libpslog SDK prefix used by Lua checks")
+set(PSLOG_LUA_STAGE_INCLUDE_DIR "${PSLOG_LUA_STAGE_ROOT}/include")
+set(PSLOG_LUA_STAGE_LIBRARY "${PSLOG_LUA_STAGE_ROOT}/lib/liblua.a")
+set(PSLOG_LUA_SDK_INCLUDE_DIR "${PSLOG_LUA_SDK_PREFIX}/include")
+set(PSLOG_LUA_SDK_LIBRARY
+    "${PSLOG_LUA_SDK_PREFIX}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}pslog${CMAKE_SHARED_LIBRARY_SUFFIX}")
+if(PSLOG_BUILD_LUA)
+    foreach(required_lua_path IN ITEMS
+            "${PSLOG_LUA_STAGE_INCLUDE_DIR}/lua.h"
+            "${PSLOG_LUA_STAGE_LIBRARY}"
+            "${PSLOG_LUA_SDK_INCLUDE_DIR}/pslog.h"
+            "${PSLOG_LUA_SDK_LIBRARY}")
+        if(NOT EXISTS "${required_lua_path}")
+            message(FATAL_ERROR
+                "staged Lua CTest dependency is missing: ${required_lua_path}. "
+                "Run 'make lua-rock' before configuring the debug-lua preset.")
+        endif()
+    endforeach()
+endif()
 
 if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER OR PSLOG_BENCHMARK_WITH_QUILL)
     include(FetchContent)
@@ -150,10 +150,15 @@ if(PSLOG_BUILD_TESTS OR PSLOG_BENCHMARK_WITH_LIBLOGGER)
     set(JANSSON_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(JANSSON_WITHOUT_TESTS ON CACHE BOOL "" FORCE)
     set(JANSSON_INSTALL OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(jansson
-        GIT_REPOSITORY https://github.com/akheron/jansson.git
-        GIT_TAG v2.15.0
-    )
+    pslog_acquire_verified_archive(
+        COMPONENT jansson URL https://github.com/akheron/jansson/releases/download/v2.15.0/jansson-2.15.0.tar.gz
+        SHA256 070a629590723228dc3b744ae90e965a569efb9c535b3309b52e80e75d8eb3be
+        OUTPUT jansson_archive)
+    pslog_stage_dependency_archive(
+        COMPONENT jansson ARCHIVE "${jansson_archive}"
+        SHA256 070a629590723228dc3b744ae90e965a569efb9c535b3309b52e80e75d8eb3be
+        OUTPUT jansson_source_dir)
+    FetchContent_Declare(jansson SOURCE_DIR "${jansson_source_dir}")
     FetchContent_MakeAvailable(jansson)
     set_target_properties(jansson PROPERTIES
         C_STANDARD 99
@@ -237,6 +242,13 @@ foreach(target pslog_shared pslog_static)
     pslog_enable_coverage_if_requested(${target})
 endforeach()
 
+# Keep an exact native public-consumer command in compile_commands.json for
+# clangd. This target is excluded from normal builds because it is an editor
+# validation surface, not a second example build path.
+add_executable(pslog_clangd_public_consumer EXCLUDE_FROM_ALL examples/example.c)
+target_link_libraries(pslog_clangd_public_consumer PRIVATE pslog_static Threads::Threads)
+pslog_configure_c_target(pslog_clangd_public_consumer)
+
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(pslog_shared PRIVATE -fvisibility=hidden)
 endif()
@@ -285,6 +297,17 @@ if(PSLOG_BUILD_TESTS)
         )
     endfunction()
 
+    function(pslog_add_binary_test test_name target test_labels test_timeout)
+        if(DEFINED PSLOG_TEST_EXECUTOR AND NOT PSLOG_TEST_EXECUTOR STREQUAL "")
+            add_test(NAME ${test_name} COMMAND ${PSLOG_TEST_EXECUTOR} $<TARGET_FILE:${target}>)
+        else()
+            # Keep a target name here: CMake then injects the toolchain's
+            # CMAKE_CROSSCOMPILING_EMULATOR for the QEMU targets.
+            add_test(NAME ${test_name} COMMAND ${target})
+        endif()
+        pslog_set_test_properties(${test_name} "${test_labels}" ${test_timeout})
+    endfunction()
+
     string(TOUPPER "${CMAKE_BUILD_TYPE}" PSLOG_TEST_BUILD_TYPE_UPPER)
     set(PSLOG_TEST_C_FLAGS "${CMAKE_C_FLAGS}")
     if(DEFINED CMAKE_C_FLAGS_${PSLOG_TEST_BUILD_TYPE_UPPER})
@@ -315,36 +338,45 @@ if(PSLOG_BUILD_TESTS)
         target_compile_definitions(pslog_tests PRIVATE _DARWIN_C_SOURCE=1)
     endif()
     target_link_libraries(pslog_tests PRIVATE pslog_test_static jansson)
+    pslog_configure_project_warnings(pslog_tests)
     pslog_enable_coverage_if_requested(pslog_tests)
-    add_test(NAME pslog_tests COMMAND pslog_tests)
-    pslog_set_test_properties(pslog_tests "unit;local" 30)
-    if(PSLOG_LUA_FOUND)
+    pslog_add_binary_test(pslog_tests pslog_tests "unit;local" 30)
+
+    # Keep the native Valgrind gate deliberately small.  The full unit binary
+    # also exercises intentional termination children and large benchmark
+    # fixtures, neither of which is part of the facade memory-check contract.
+    add_executable(pslog_valgrind_facade_tests tests/valgrind_facade_test.c)
+    target_include_directories(pslog_valgrind_facade_tests PRIVATE
+        ${PSLOG_GENERATED_INCLUDE_DIR}
+        include
+    )
+    target_link_libraries(pslog_valgrind_facade_tests PRIVATE pslog_static)
+    pslog_configure_project_warnings(pslog_valgrind_facade_tests)
+    pslog_enable_coverage_if_requested(pslog_valgrind_facade_tests)
+    pslog_add_binary_test(pslog_valgrind_facade_tests pslog_valgrind_facade_tests "unit;local;memory-check" 30)
+    if(PSLOG_BUILD_LUA)
         add_executable(pslog_lua_interop_tests
             tests/lua_interop_embedder_test.c
             lua/src/pslog_lua.c
         )
         target_include_directories(pslog_lua_interop_tests PRIVATE
-            ${PSLOG_GENERATED_INCLUDE_DIR}
+            ${PSLOG_LUA_STAGE_INCLUDE_DIR}
+            ${PSLOG_LUA_SDK_INCLUDE_DIR}
             include
-            ${PSLOG_LUA_INCLUDE_DIRS}
         )
         target_compile_definitions(pslog_lua_interop_tests PRIVATE
             PSLOG_VERSION_STRING="${PSLOG_RESOLVED_VERSION}"
             _POSIX_C_SOURCE=200809L
         )
-        target_compile_options(pslog_lua_interop_tests PRIVATE
-            ${PSLOG_LUA_CFLAGS_OTHER}
-        )
-        target_link_directories(pslog_lua_interop_tests PRIVATE
-            ${PSLOG_LUA_LIBRARY_DIRS}
-        )
         target_link_libraries(pslog_lua_interop_tests PRIVATE
             pslog_test_static
-            ${PSLOG_LUA_LIBRARIES}
+            ${PSLOG_LUA_STAGE_LIBRARY}
+            m
+            ${CMAKE_DL_LIBS}
         )
+        pslog_configure_project_warnings(pslog_lua_interop_tests)
         pslog_enable_coverage_if_requested(pslog_lua_interop_tests)
-        add_test(NAME pslog_lua_interop_tests COMMAND pslog_lua_interop_tests)
-        pslog_set_test_properties(pslog_lua_interop_tests "unit;local;lua" 30)
+        pslog_add_binary_test(pslog_lua_interop_tests pslog_lua_interop_tests "unit;local;lua" 30)
         set_tests_properties(pslog_lua_interop_tests PROPERTIES
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
@@ -366,10 +398,10 @@ if(PSLOG_BUILD_TESTS)
         target_compile_definitions(pslog_single_header_tests PRIVATE _DARWIN_C_SOURCE=1)
     endif()
     target_link_libraries(pslog_single_header_tests PRIVATE Threads::Threads jansson)
+    pslog_configure_project_warnings(pslog_single_header_tests)
     add_dependencies(pslog_single_header_tests package-single-header)
     pslog_enable_coverage_if_requested(pslog_single_header_tests)
-    add_test(NAME pslog_single_header_tests COMMAND pslog_single_header_tests)
-    pslog_set_test_properties(pslog_single_header_tests "unit;local;smoke" 30)
+    pslog_add_binary_test(pslog_single_header_tests pslog_single_header_tests "unit;local;smoke" 30)
     add_test(NAME package_archives_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -381,6 +413,7 @@ if(PSLOG_BUILD_TESTS)
         -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
         -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
+        -DPSLOG_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
         -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_archives_test.cmake
     )
@@ -421,6 +454,19 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    if(PSLOG_BUILD_LUA)
+        add_test(NAME lua_release_artifacts_test
+            COMMAND ${CMAKE_COMMAND}
+                -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+                -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_release_artifacts_test.cmake
+        )
+        set_tests_properties(lua_release_artifacts_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;packaging;smoke;lua"
+            TIMEOUT 90
+        )
+    endif()
     add_test(NAME c_only_configure_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -444,6 +490,63 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME preset_contract_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/preset_contract_test.cmake
+    )
+    set_tests_properties(preset_contract_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME dependency_cache_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/dependency_cache_test.cmake
+    )
+    set_tests_properties(dependency_cache_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME cpkt_toolchains_cache_recovery_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cpkt_toolchains_cache_recovery_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cpkt_toolchains_cache_recovery_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME release_matrix_luarocks_override_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_matrix_luarocks_override_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(release_matrix_luarocks_override_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME cpkt_aflpp_cache_lock_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cpkt_aflpp_cache_lock_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cpkt_aflpp_cache_lock_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "fuzz;local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME fuzz_gate_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz_gate_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(fuzz_gate_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "fuzz;local;smoke"
+        TIMEOUT 30
+    )
     add_test(NAME darwin_linker_route_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -455,6 +558,92 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME discover_target_tools_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/discover_target_tools_test.cmake
+    )
+    set_tests_properties(discover_target_tools_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME with_lock_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/with_lock_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(with_lock_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME release_pipeline_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_pipeline_test.cmake
+    )
+    set_tests_properties(release_pipeline_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME make_parse_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/make_parse_test.cmake
+    )
+    set_tests_properties(make_parse_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    add_test(NAME run_timed_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_timed_test.cmake
+    )
+    set_tests_properties(run_timed_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    if(CMAKE_CURRENT_BINARY_DIR MATCHES "/build/host$")
+        add_test(NAME host_runner_native_test
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/host_runner_native_test.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(host_runner_native_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;smoke"
+            TIMEOUT 30
+        )
+        add_test(NAME rebaseline_compiler_fallback_test
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/rebaseline_compiler_fallback_test.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(rebaseline_compiler_fallback_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;smoke"
+            TIMEOUT 30
+        )
+    endif()
+    if(PSLOG_TARGET_ID STREQUAL "x86_64-linux-gnu" AND
+       DEFINED PSLOG_TEST_EXECUTOR AND NOT PSLOG_TEST_EXECUTOR STREQUAL "")
+        add_test(NAME run_sysroot_binary_test
+            COMMAND ${CMAKE_COMMAND}
+                -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+                -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+                -DPSLOG_BINARY=$<TARGET_FILE:pslog_valgrind_facade_tests>
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_sysroot_binary_test.cmake
+        )
+        set_tests_properties(run_sysroot_binary_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;smoke"
+            TIMEOUT 30
+        )
+    endif()
     add_test(NAME public_symbol_visibility_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -469,6 +658,17 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME public_api_docs_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/public_api_docs_test.cmake
+    )
+    set_tests_properties(public_api_docs_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke"
+        TIMEOUT 30
+    )
+    string(JOIN "|" PSLOG_TEST_EXECUTOR_ARG ${PSLOG_TEST_EXECUTOR})
     add_test(NAME example_integration_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -477,9 +677,10 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_C_FLAGS=${PSLOG_TEST_C_FLAGS}
             -DPSLOG_EXE_LINKER_FLAGS=${PSLOG_TEST_EXE_LINKER_FLAGS}
             -DPSLOG_THREAD_LIBS=${CMAKE_THREAD_LIBS_INIT}
-            -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
-            -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/example_integration_test.cmake
+        -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
+        -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
+        -DPSLOG_TEST_EXECUTOR=${PSLOG_TEST_EXECUTOR_ARG}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/example_integration_test.cmake
     )
     set_tests_properties(example_integration_test PROPERTIES
         RUN_SERIAL TRUE
@@ -487,7 +688,7 @@ if(PSLOG_BUILD_TESTS)
         TIMEOUT 60
     )
     add_custom_target(pslog_ctest_prerequisites
-        DEPENDS pslog_tests pslog_single_header_tests pslog_shared
+        DEPENDS pslog_tests pslog_valgrind_facade_tests pslog_single_header_tests pslog_shared
     )
 endif()
 
@@ -498,20 +699,21 @@ if(PSLOG_BUILD_BENCHMARKS)
         add_library(pslog_bench_liblogger SHARED bench/bench_liblogger_stub.c)
     endif()
     target_include_directories(pslog_bench_liblogger PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    pslog_configure_project_warnings(pslog_bench_liblogger)
     set_target_properties(pslog_bench_liblogger PROPERTIES
         OUTPUT_NAME pslog_bench_liblogger
         POSITION_INDEPENDENT_CODE ON
     )
 
     if(PSLOG_BENCHMARK_WITH_LIBLOGGER)
-        FetchContent_Declare(liblogger
-            GIT_REPOSITORY https://github.com/briandowns/liblogger.git
-            GIT_TAG 3ecb5c636b5a97fc35d0a6373a3238f1596be82a
-        )
-        FetchContent_GetProperties(liblogger)
-        if(NOT liblogger_POPULATED)
-            FetchContent_Populate(liblogger)
-        endif()
+        pslog_acquire_verified_archive(
+            COMPONENT liblogger URL https://github.com/briandowns/liblogger/archive/3ecb5c636b5a97fc35d0a6373a3238f1596be82a.tar.gz
+            SHA256 c10ce24f036291e3b52c32a30f1bf53eb3d518693adac1c7d70e4ea87f974464
+            OUTPUT liblogger_archive)
+        pslog_stage_dependency_archive(
+            COMPONENT liblogger ARCHIVE "${liblogger_archive}"
+            SHA256 c10ce24f036291e3b52c32a30f1bf53eb3d518693adac1c7d70e4ea87f974464
+            OUTPUT liblogger_SOURCE_DIR)
 
         target_sources(pslog_bench_liblogger PRIVATE
             bench/bench_liblogger.c
@@ -525,7 +727,7 @@ if(PSLOG_BUILD_BENCHMARKS)
         set_source_files_properties(
             bench/bench_liblogger.c
             ${liblogger_SOURCE_DIR}/logger.c
-            PROPERTIES COMPILE_OPTIONS "-std=gnu99"
+            PROPERTIES COMPILE_OPTIONS "-std=gnu99;-Wno-pedantic"
         )
         target_compile_definitions(pslog_bench_liblogger PRIVATE PSLOG_HAVE_LIBLOGGER_BENCH=1)
     endif()
@@ -540,14 +742,14 @@ if(PSLOG_BUILD_BENCHMARKS)
         enable_language(CXX)
 
         add_library(pslog_bench_quill SHARED bench/bench_quill.cpp)
-        FetchContent_Declare(quill
-            GIT_REPOSITORY https://github.com/odygrd/quill.git
-            GIT_TAG 7c0ffa54e51c2b8db6ec091c2922aeaf9b3b08c0
-        )
-        FetchContent_GetProperties(quill)
-        if(NOT quill_POPULATED)
-            FetchContent_Populate(quill)
-        endif()
+        pslog_acquire_verified_archive(
+            COMPONENT quill URL https://github.com/odygrd/quill/archive/7c0ffa54e51c2b8db6ec091c2922aeaf9b3b08c0.tar.gz
+            SHA256 d8072c2a9c079200d16164b40bfa26ce7690488ab647b5cb48ee5e84a13c0e76
+            OUTPUT quill_archive)
+        pslog_stage_dependency_archive(
+            COMPONENT quill ARCHIVE "${quill_archive}"
+            SHA256 d8072c2a9c079200d16164b40bfa26ce7690488ab647b5cb48ee5e84a13c0e76
+            OUTPUT quill_SOURCE_DIR)
 
         target_include_directories(pslog_bench_quill PRIVATE
             ${quill_SOURCE_DIR}/include
@@ -558,6 +760,7 @@ if(PSLOG_BUILD_BENCHMARKS)
         add_library(pslog_bench_quill SHARED bench/bench_quill_stub.c)
     endif()
     target_include_directories(pslog_bench_quill PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    pslog_configure_project_warnings(pslog_bench_quill)
     set_target_properties(pslog_bench_quill PROPERTIES
         OUTPUT_NAME pslog_bench_quill
         POSITION_INDEPENDENT_CODE ON
@@ -569,6 +772,7 @@ if(PSLOG_BUILD_BENCHMARKS)
     )
     target_include_directories(pslog_bench PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(pslog_bench PRIVATE pslog_static)
+    pslog_configure_project_warnings(pslog_bench)
     pslog_enable_coverage_if_requested(pslog_bench)
     if(PSLOG_BENCHMARK_WITH_LIBLOGGER)
         target_link_libraries(pslog_bench PRIVATE pslog_bench_liblogger)
@@ -577,20 +781,21 @@ if(PSLOG_BUILD_BENCHMARKS)
 endif()
 
 if(PSLOG_BUILD_FUZZ)
-    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-        message(FATAL_ERROR "PSLOG_BUILD_FUZZ=ON requires Clang as the C compiler")
-    endif()
-    pslog_assert_fuzz_toolchain_supported()
-
     add_executable(pslog_fuzz fuzz/pslog_fuzz.c)
     target_include_directories(pslog_fuzz PRIVATE include)
     target_link_libraries(pslog_fuzz PRIVATE pslog_static)
     pslog_configure_c_target(pslog_fuzz)
-    target_compile_options(pslog_fuzz PRIVATE -fsanitize=fuzzer,address)
-    target_link_options(pslog_fuzz PRIVATE -fsanitize=fuzzer,address)
 endif()
 
-find_program(GCOV_BIN NAMES gcov)
+execute_process(
+    COMMAND "${CMAKE_C_COMPILER}" -print-prog-name=gcov
+    OUTPUT_VARIABLE GCOV_BIN
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT IS_ABSOLUTE "${GCOV_BIN}" OR NOT EXISTS "${GCOV_BIN}")
+    unset(GCOV_BIN)
+endif()
 
 if(PSLOG_BUILD_TESTS AND PSLOG_ENABLE_COVERAGE AND GCOV_BIN)
     add_custom_target(coverage-report
@@ -633,7 +838,7 @@ add_custom_target(package-archive
         -DPSLOG_SHARED_LIB_NAME=$<TARGET_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_LINK_NAME=$<TARGET_LINKER_FILE_NAME:pslog_shared>
         -DPSLOG_SHARED_SONAME=$<TARGET_SONAME_FILE_NAME:pslog_shared>
-        -DPSLOG_STRIP=${CMAKE_STRIP}
+        -DPSLOG_TARGET_TOOL_DISCOVERY=${CMAKE_CURRENT_SOURCE_DIR}/scripts/discover_target_tools.sh
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_archive.cmake
     DEPENDS pslog_shared pslog_static
     VERBATIM
@@ -644,6 +849,8 @@ add_custom_target(package-single-header
         -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
         -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
         -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
+        -DPSLOG_READELF=${CMAKE_READELF}
+        -DPSLOG_OTOOL=${CPKT_OTOOL}
         -DPSLOG_PUBLIC_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/pslog.h
         -DPSLOG_PUBLIC_VERSION_HEADER=${PSLOG_GENERATED_VERSION_HEADER}
         -DPSLOG_INTERNAL_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/src/pslog_internal.h
@@ -675,11 +882,9 @@ add_custom_target(package-checksums
 )
 
 add_custom_target(package-privacy-gate
-    COMMAND ${CMAKE_COMMAND}
-        -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
-        -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-        -DPSLOG_VERSION=${PSLOG_RESOLVED_VERSION}
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_release_privacy.cmake
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_release_privacy.sh
+        --build-dir ${CMAKE_CURRENT_BINARY_DIR}
+        --target-id ${PSLOG_TARGET_ID}
     DEPENDS package-checksums
     VERBATIM
 )

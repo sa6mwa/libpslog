@@ -9,6 +9,7 @@
 #include "pslog_version.h"
 #endif
 
+/** Visibility annotation applied to every public libpslog ABI symbol. */
 #if defined(__GNUC__) || defined(__clang__)
 #define PSLOG_API __attribute__((visibility("default")))
 #else
@@ -387,37 +388,69 @@ typedef struct pslog_palette {
  * and through LSP/navigation tooling instead of relying only on string lookup.
  * They are immutable and process-lifetime stable.
  */
+/** Immutable process-lifetime built-in default ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_default;
+/** Immutable process-lifetime built-in Outrun Electric ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_outrun_electric;
+/** Immutable process-lifetime built-in iosvkem ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_iosvkem;
+/** Immutable process-lifetime built-in Gruvbox ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_gruvbox;
+/** Immutable process-lifetime built-in Dracula ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_dracula;
+/** Immutable process-lifetime built-in Nord ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_nord;
+/** Immutable process-lifetime built-in Tokyo Night ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_tokyo_night;
+/** Immutable process-lifetime built-in Solarized Nightfall ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_solarized_nightfall;
+/** Immutable process-lifetime built-in Catppuccin Mocha ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_catppuccin_mocha;
+/** Immutable process-lifetime built-in light Gruvbox ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_gruvbox_light;
+/** Immutable process-lifetime built-in Monokai Vibrant ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_monokai_vibrant;
+/** Immutable process-lifetime built-in One Dark Aurora ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_one_dark_aurora;
+/** Immutable process-lifetime built-in Synthwave '84 ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_synthwave_84;
+/** Immutable process-lifetime built-in Kanagawa ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_kanagawa;
+/** Immutable process-lifetime built-in Rose Pine ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_rose_pine;
+/** Immutable process-lifetime built-in Rose Pine Dawn ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_rose_pine_dawn;
+/** Immutable process-lifetime built-in Everforest ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_everforest;
+/** Immutable process-lifetime built-in light Everforest ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_everforest_light;
+/** Immutable process-lifetime built-in Night Owl ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_night_owl;
+/** Immutable process-lifetime built-in Ayu Mirage ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_ayu_mirage;
+/** Immutable process-lifetime built-in light Ayu ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_ayu_light;
+/** Immutable process-lifetime built-in One Light ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_one_light;
+/** Immutable process-lifetime built-in One Dark ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_one_dark;
+/** Immutable process-lifetime built-in Solarized Light ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_solarized_light;
+/** Immutable process-lifetime built-in Solarized Dark ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_solarized_dark;
+/** Immutable process-lifetime built-in GitHub Light ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_github_light;
+/** Immutable process-lifetime built-in GitHub Dark ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_github_dark;
+/** Immutable process-lifetime built-in PaperColor Light ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_papercolor_light;
+/** Immutable process-lifetime built-in PaperColor Dark ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_papercolor_dark;
+/** Immutable process-lifetime built-in Oceanic Next ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_oceanic_next;
+/** Immutable process-lifetime built-in Horizon ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_horizon;
+/** Immutable process-lifetime built-in Palenight ANSI palette. */
 PSLOG_API extern const pslog_palette pslog_builtin_palette_palenight;
 
 /**
@@ -480,6 +513,12 @@ typedef struct pslog_config {
   pslog_output output;
 } pslog_config;
 
+/**
+ * Opaque logger handle whose receiver methods are declared below.
+ *
+ * Use `log->verb(log, ...)` for logger operations and `log->destroy(log)` to
+ * release each owned handle.
+ */
 typedef struct pslog_logger pslog_logger;
 
 /**

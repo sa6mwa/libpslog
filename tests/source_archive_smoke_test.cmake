@@ -57,6 +57,15 @@ set(configure_command
     -DPSLOG_BUILD_BENCHMARKS=OFF
     -DPSLOG_BUILD_FUZZ=OFF
 )
+if(DEFINED PSLOG_TOOLCHAIN_RELATIVE AND NOT PSLOG_TOOLCHAIN_RELATIVE STREQUAL "")
+    set(source_toolchain_file "${source_root}/${PSLOG_TOOLCHAIN_RELATIVE}")
+    if(NOT EXISTS "${source_toolchain_file}")
+        message(FATAL_ERROR "source archive smoke toolchain does not exist: ${source_toolchain_file}")
+    endif()
+    list(APPEND configure_command "-DCMAKE_TOOLCHAIN_FILE=${source_toolchain_file}")
+else()
+    message(FATAL_ERROR "source archive smoke requires PSLOG_TOOLCHAIN_RELATIVE")
+endif()
 if(DEFINED PSLOG_C_COMPILER AND NOT PSLOG_C_COMPILER STREQUAL "")
     list(APPEND configure_command "-DCMAKE_C_COMPILER=${PSLOG_C_COMPILER}")
 endif()

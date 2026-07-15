@@ -62,6 +62,9 @@ set(CMAKE_INSTALL_NAME_TOOL
 set(CMAKE_STRIP
     "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-strip"
     CACHE FILEPATH "")
+set(CPKT_OTOOL
+    "${PSLOG_OSXCROSS_BIN_DIR}/${PSLOG_OSXCROSS_HOST}-otool"
+    CACHE FILEPATH "")
 
 foreach(_pslog_required_tool
         CMAKE_C_COMPILER
@@ -69,7 +72,8 @@ foreach(_pslog_required_tool
         CMAKE_RANLIB
         CMAKE_LINKER
         CMAKE_INSTALL_NAME_TOOL
-        CMAKE_STRIP)
+        CMAKE_STRIP
+        CPKT_OTOOL)
     if(NOT EXISTS "${${_pslog_required_tool}}")
         message(FATAL_ERROR
             "The arm64 Apple Darwin osxcross toolchain is missing "
@@ -79,7 +83,7 @@ foreach(_pslog_required_tool
     endif()
 endforeach()
 
-set(_pslog_darwin_linker_flag "-fuse-ld=${CMAKE_LINKER}")
+set(_pslog_darwin_linker_flag "--ld-path=${CMAKE_LINKER}")
 foreach(_pslog_linker_flags
         CMAKE_EXE_LINKER_FLAGS
         CMAKE_SHARED_LINKER_FLAGS

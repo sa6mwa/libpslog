@@ -8,6 +8,18 @@ case "$tag" in
     printf '%s\n' "${tag#v}"
     ;;
   *)
-    printf '0.0.0\n'
+    if [ ! -d .git ] && [ -f VERSION ]; then
+      version=$(sed -n '1p' VERSION)
+      case "$version" in
+        [0-9]*.[0-9]*.[0-9]*)
+          printf '%s\n' "$version"
+          ;;
+        *)
+          printf '0.0.0\n'
+          ;;
+      esac
+    else
+      printf '0.0.0\n'
+    fi
     ;;
 esac
