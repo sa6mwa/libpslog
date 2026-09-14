@@ -12,8 +12,8 @@ export CPKT_TOOLCHAIN_CACHE="$fixture_root/cache"
 unset CPKT_TOOLCHAIN_LOCK_TIMEOUT
 bootlin_description() {
   printf 'target=x86_64-linux-gnu\nroot=%s\nsysroot=%s\ncc=/fixture/cc\ncxx=/fixture/cxx\n' \
-    "$fixture_root/cache/roots/x86-64--glibc--stable-2025.08-1" \
-    "$fixture_root/cache/roots/x86-64--glibc--stable-2025.08-1/x86_64-buildroot-linux-gnu/sysroot"
+    "$fixture_root/cache/roots/x86-64--glibc--stable-2026.08-1" \
+    "$fixture_root/cache/roots/x86-64--glibc--stable-2026.08-1/x86_64-buildroot-linux-gnu/sysroot"
 }
 lock_held=0
 ready_calls=0

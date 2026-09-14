@@ -2,9 +2,23 @@ cmake_minimum_required(VERSION 3.21)
 
 include(cmake/pslog_version.cmake)
 
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND
+   (NOT DEFINED CMAKE_TOOLCHAIN_FILE OR CMAKE_TOOLCHAIN_FILE STREQUAL ""))
+    message(FATAL_ERROR
+        "Linux builds require a pinned Bootlin toolchain before compiler discovery. Configure with a libpslog preset or "
+        "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/host.cmake.")
+endif()
+
 project(libpslog VERSION ${PSLOG_PROJECT_VERSION_CORE} LANGUAGES C)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   (NOT DEFINED PSLOG_BOOTLIN_TOOLCHAIN OR NOT PSLOG_BOOTLIN_TOOLCHAIN))
+    message(FATAL_ERROR
+        "Linux builds require a pinned Bootlin toolchain. Configure with a libpslog preset or "
+        "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/host.cmake.")
+endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -62,6 +76,63 @@ function(pslog_enable_coverage_if_requested target)
             target_link_options(${target} PRIVATE --coverage)
         endif()
     endif()
+endfunction()
+
+# Development executables are deliberately not installed.  Native Linux ones
+# carry the selected collection's interpreter and a private DT_RPATH so CTest,
+# examples, fuzzing, and generated consumers run directly with Bootlin's libc.
+function(pslog_configure_nonshipped_executable target)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_CROSSCOMPILING)
+        return()
+    endif()
+    if(NOT DEFINED PSLOG_BOOTLIN_SYSROOT OR PSLOG_BOOTLIN_SYSROOT STREQUAL "")
+        message(FATAL_ERROR "Native Linux executable ${target} has no selected Bootlin sysroot")
+    endif()
+
+    set(loader_candidates
+        "${PSLOG_BOOTLIN_SYSROOT}/lib/ld-linux-x86-64.so.2"
+        "${PSLOG_BOOTLIN_SYSROOT}/lib/ld-musl-x86_64.so.1"
+        "${PSLOG_BOOTLIN_SYSROOT}/lib/ld-linux-aarch64.so.1"
+        "${PSLOG_BOOTLIN_SYSROOT}/lib/ld-musl-aarch64.so.1"
+        "${PSLOG_BOOTLIN_SYSROOT}/lib/ld-linux-armhf.so.3"
+        "${PSLOG_BOOTLIN_SYSROOT}/lib/ld-musl-armhf.so.1"
+    )
+    set(loader "")
+    foreach(candidate IN LISTS loader_candidates)
+        if(EXISTS "${candidate}")
+            set(loader "${candidate}")
+            break()
+        endif()
+    endforeach()
+    if(loader STREQUAL "")
+        message(FATAL_ERROR "Selected Bootlin sysroot has no supported ELF interpreter: ${PSLOG_BOOTLIN_SYSROOT}")
+    endif()
+
+    set(runtime_paths "$ORIGIN")
+    foreach(directory IN ITEMS
+            "${PSLOG_BOOTLIN_SYSROOT}/lib"
+            "${PSLOG_BOOTLIN_SYSROOT}/usr/lib"
+            "${PSLOG_BOOTLIN_SYSROOT}/lib64"
+            "${PSLOG_BOOTLIN_SYSROOT}/usr/lib64"
+            "${PSLOG_BOOTLIN_ROOT}/lib")
+        if(IS_DIRECTORY "${directory}")
+            list(APPEND runtime_paths "${directory}")
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES runtime_paths)
+    list(JOIN runtime_paths ":" runtime_search_path)
+    set(runtime_linker_flags
+        "-Wl,--dynamic-linker,${loader}"
+        "-Wl,--disable-new-dtags,-rpath,${runtime_search_path}")
+    target_link_options(${target} PRIVATE ${runtime_linker_flags})
+
+    set(PSLOG_BOOTLIN_ELF_INTERPRETER "${loader}" CACHE FILEPATH
+        "ELF interpreter used by native non-shipped executables" FORCE)
+    set(PSLOG_BOOTLIN_RUNTIME_SEARCH_PATH "${runtime_search_path}" CACHE STRING
+        "DT_RPATH used by native non-shipped executables" FORCE)
+    string(JOIN " " runtime_linker_flags_text ${runtime_linker_flags})
+    set(PSLOG_NONSHIPPED_ELF_LINKER_FLAGS "${runtime_linker_flags_text}" CACHE STRING
+        "Link options for generated native non-shipped ELF consumers" FORCE)
 endfunction()
 
 find_program(CLANG_FORMAT_BIN NAMES clang-format)
@@ -248,6 +319,7 @@ endforeach()
 add_executable(pslog_clangd_public_consumer EXCLUDE_FROM_ALL examples/example.c)
 target_link_libraries(pslog_clangd_public_consumer PRIVATE pslog_static Threads::Threads)
 pslog_configure_c_target(pslog_clangd_public_consumer)
+pslog_configure_nonshipped_executable(pslog_clangd_public_consumer)
 
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(pslog_shared PRIVATE -fvisibility=hidden)
@@ -298,13 +370,10 @@ if(PSLOG_BUILD_TESTS)
     endfunction()
 
     function(pslog_add_binary_test test_name target test_labels test_timeout)
-        if(DEFINED PSLOG_TEST_EXECUTOR AND NOT PSLOG_TEST_EXECUTOR STREQUAL "")
-            add_test(NAME ${test_name} COMMAND ${PSLOG_TEST_EXECUTOR} $<TARGET_FILE:${target}>)
-        else()
-            # Keep a target name here: CMake then injects the toolchain's
-            # CMAKE_CROSSCOMPILING_EMULATOR for the QEMU targets.
-            add_test(NAME ${test_name} COMMAND ${target})
-        endif()
+        # Keep a target name here: CMake injects the toolchain's
+        # CMAKE_CROSSCOMPILING_EMULATOR for QEMU targets. Native Bootlin
+        # executables run directly from their own ELF metadata.
+        add_test(NAME ${test_name} COMMAND ${target})
         pslog_set_test_properties(${test_name} "${test_labels}" ${test_timeout})
     endfunction()
 
@@ -319,6 +388,10 @@ if(PSLOG_BUILD_TESTS)
     endif()
     if(PSLOG_ENABLE_COVERAGE AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
         string(APPEND PSLOG_TEST_EXE_LINKER_FLAGS " --coverage")
+    endif()
+    if(DEFINED PSLOG_NONSHIPPED_ELF_LINKER_FLAGS AND
+       NOT PSLOG_NONSHIPPED_ELF_LINKER_FLAGS STREQUAL "")
+        string(APPEND PSLOG_TEST_EXE_LINKER_FLAGS " ${PSLOG_NONSHIPPED_ELF_LINKER_FLAGS}")
     endif()
     add_executable(pslog_tests
         tests/test_main.c
@@ -340,6 +413,7 @@ if(PSLOG_BUILD_TESTS)
     target_link_libraries(pslog_tests PRIVATE pslog_test_static jansson)
     pslog_configure_project_warnings(pslog_tests)
     pslog_enable_coverage_if_requested(pslog_tests)
+    pslog_configure_nonshipped_executable(pslog_tests)
     pslog_add_binary_test(pslog_tests pslog_tests "unit;local" 30)
 
     # Keep the native Valgrind gate deliberately small.  The full unit binary
@@ -353,7 +427,24 @@ if(PSLOG_BUILD_TESTS)
     target_link_libraries(pslog_valgrind_facade_tests PRIVATE pslog_static)
     pslog_configure_project_warnings(pslog_valgrind_facade_tests)
     pslog_enable_coverage_if_requested(pslog_valgrind_facade_tests)
+    pslog_configure_nonshipped_executable(pslog_valgrind_facade_tests)
     pslog_add_binary_test(pslog_valgrind_facade_tests pslog_valgrind_facade_tests "unit;local;memory-check" 30)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+        add_test(NAME bootlin_elf_runtime_test
+            COMMAND ${CMAKE_COMMAND}
+                -DPSLOG_BINARY=$<TARGET_FILE:pslog_valgrind_facade_tests>
+                -DPSLOG_READELF=${CMAKE_READELF}
+                -DPSLOG_BOOTLIN_INTERPRETER=${PSLOG_BOOTLIN_ELF_INTERPRETER}
+                -DPSLOG_BOOTLIN_SYSROOT=${PSLOG_BOOTLIN_SYSROOT}
+                -DPSLOG_BOOTLIN_RPATH=${PSLOG_BOOTLIN_RUNTIME_SEARCH_PATH}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/bootlin_elf_runtime_test.cmake
+        )
+        set_tests_properties(bootlin_elf_runtime_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;smoke;runtime"
+            TIMEOUT 30
+        )
+    endif()
     if(PSLOG_BUILD_LUA)
         add_executable(pslog_lua_interop_tests
             tests/lua_interop_embedder_test.c
@@ -376,6 +467,7 @@ if(PSLOG_BUILD_TESTS)
         )
         pslog_configure_project_warnings(pslog_lua_interop_tests)
         pslog_enable_coverage_if_requested(pslog_lua_interop_tests)
+        pslog_configure_nonshipped_executable(pslog_lua_interop_tests)
         pslog_add_binary_test(pslog_lua_interop_tests pslog_lua_interop_tests "unit;local;lua" 30)
         set_tests_properties(pslog_lua_interop_tests PROPERTIES
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -401,6 +493,7 @@ if(PSLOG_BUILD_TESTS)
     pslog_configure_project_warnings(pslog_single_header_tests)
     add_dependencies(pslog_single_header_tests package-single-header)
     pslog_enable_coverage_if_requested(pslog_single_header_tests)
+    pslog_configure_nonshipped_executable(pslog_single_header_tests)
     pslog_add_binary_test(pslog_single_header_tests pslog_single_header_tests "unit;local;smoke" 30)
     add_test(NAME package_archives_test
         COMMAND ${CMAKE_COMMAND}
@@ -500,6 +593,29 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME host_toolchain_darwin_test
+        COMMAND ${CMAKE_COMMAND}
+            -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/host_toolchain_darwin_test.cmake
+    )
+    set_tests_properties(host_toolchain_darwin_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke;darwin"
+        TIMEOUT 30
+    )
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+        add_test(NAME linux_bootlin_required_test
+            COMMAND ${CMAKE_COMMAND}
+                -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+                -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/linux_bootlin_required_test.cmake
+        )
+        set_tests_properties(linux_bootlin_required_test PROPERTIES
+            RUN_SERIAL TRUE
+            LABELS "local;smoke;toolchain"
+            TIMEOUT 30
+        )
+    endif()
     add_test(NAME dependency_cache_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -629,21 +745,6 @@ if(PSLOG_BUILD_TESTS)
             TIMEOUT 30
         )
     endif()
-    if(PSLOG_TARGET_ID STREQUAL "x86_64-linux-gnu" AND
-       DEFINED PSLOG_TEST_EXECUTOR AND NOT PSLOG_TEST_EXECUTOR STREQUAL "")
-        add_test(NAME run_sysroot_binary_test
-            COMMAND ${CMAKE_COMMAND}
-                -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-                -DPSLOG_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
-                -DPSLOG_BINARY=$<TARGET_FILE:pslog_valgrind_facade_tests>
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_sysroot_binary_test.cmake
-        )
-        set_tests_properties(run_sysroot_binary_test PROPERTIES
-            RUN_SERIAL TRUE
-            LABELS "local;smoke"
-            TIMEOUT 30
-        )
-    endif()
     add_test(NAME public_symbol_visibility_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -668,7 +769,6 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
-    string(JOIN "|" PSLOG_TEST_EXECUTOR_ARG ${PSLOG_TEST_EXECUTOR})
     add_test(NAME example_integration_test
         COMMAND ${CMAKE_COMMAND}
             -DPSLOG_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -679,7 +779,6 @@ if(PSLOG_BUILD_TESTS)
             -DPSLOG_THREAD_LIBS=${CMAKE_THREAD_LIBS_INIT}
         -DPSLOG_CROSSCOMPILING=${CMAKE_CROSSCOMPILING}
         -DPSLOG_CROSSCOMPILING_EMULATOR=${PSLOG_CROSSCOMPILING_EMULATOR_ARG}
-        -DPSLOG_TEST_EXECUTOR=${PSLOG_TEST_EXECUTOR_ARG}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/example_integration_test.cmake
     )
     set_tests_properties(example_integration_test PROPERTIES
@@ -774,6 +873,7 @@ if(PSLOG_BUILD_BENCHMARKS)
     target_link_libraries(pslog_bench PRIVATE pslog_static)
     pslog_configure_project_warnings(pslog_bench)
     pslog_enable_coverage_if_requested(pslog_bench)
+    pslog_configure_nonshipped_executable(pslog_bench)
     if(PSLOG_BENCHMARK_WITH_LIBLOGGER)
         target_link_libraries(pslog_bench PRIVATE pslog_bench_liblogger)
         target_compile_definitions(pslog_bench PRIVATE PSLOG_HAVE_LIBLOGGER_BENCH=1)
@@ -785,6 +885,7 @@ if(PSLOG_BUILD_FUZZ)
     target_include_directories(pslog_fuzz PRIVATE include)
     target_link_libraries(pslog_fuzz PRIVATE pslog_static)
     pslog_configure_c_target(pslog_fuzz)
+    pslog_configure_nonshipped_executable(pslog_fuzz)
 endif()
 
 execute_process(

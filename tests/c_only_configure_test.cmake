@@ -26,6 +26,7 @@ execute_process(
         -DPSLOG_BUILD_FUZZ=OFF
         -DPSLOG_BENCHMARK_WITH_LIBLOGGER=OFF
         -DPSLOG_BENCHMARK_WITH_QUILL=OFF
+        -DCMAKE_TOOLCHAIN_FILE=${PSLOG_ROOT}/cmake/toolchains/host.cmake
         -DCMAKE_C_COMPILER=${PSLOG_C_COMPILER}
         -DCMAKE_CXX_COMPILER=${fake_cxx}
     RESULT_VARIABLE configure_result
@@ -37,4 +38,8 @@ if(NOT configure_result EQUAL 0)
         "expected a plain C-only configure to succeed without a working C++ compiler\n"
         "stdout:\n${configure_stdout}\n"
         "stderr:\n${configure_stderr}")
+endif()
+file(READ "${build_dir}/CMakeCache.txt" configured_cache)
+if(NOT configured_cache MATCHES "PSLOG_BOOTLIN_TOOLCHAIN:BOOL=TRUE")
+    message(FATAL_ERROR "Linux C-only configure did not select the required Bootlin collection")
 endif()

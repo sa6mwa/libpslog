@@ -126,6 +126,8 @@ function(pslog_configure_bootlin_toolchain target_id)
         "Pinned Bootlin collection root selected by the active toolchain" FORCE)
     set(PSLOG_BOOTLIN_SYSROOT "${bootlin_sysroot}" CACHE PATH
         "Pinned Bootlin sysroot selected by the active toolchain" FORCE)
+    set(PSLOG_BOOTLIN_TOOLCHAIN TRUE CACHE BOOL
+        "Whether this configuration uses a pinned Bootlin collection" FORCE)
     set(CMAKE_FIND_ROOT_PATH "${bootlin_sysroot}" "${bootlin_root}" CACHE STRING "" FORCE)
     set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER CACHE STRING "" FORCE)
     set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY CACHE STRING "" FORCE)

@@ -64,7 +64,7 @@ install_bootlin fixture
   printf 'reacquired toolchain archive was not extracted\n' >&2
   exit 1
 }
-[[ -f "$CPKT_TOOLCHAIN_CACHE/locks/fixture.lock" ]] || {
+[[ -f "$CPKT_TOOLCHAIN_CACHE/locks/bootlin-fixture.lock" ]] || {
   printf 'toolchain cache lock was not created\n' >&2
   exit 1
 }

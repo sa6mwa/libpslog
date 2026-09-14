@@ -24,14 +24,8 @@ if [[ -z "$CC" || ! -x "$CC" || -z "$CXX" || ! -x "$CXX" ]]; then
 fi
 export CC CXX
 
-host_executor="${PSLOG_HOST_EXECUTOR:-$repo_root/scripts/run_host_binary.sh}"
-if [ ! -x "$host_executor" ]; then
-  printf 'rebaseline requires PSLOG_HOST_EXECUTOR to name the native Bootlin sysroot runner\n' >&2
-  exit 1
-fi
-
 if [[ "${PSLOG_REBASELINE_VALIDATE_ONLY:-}" = 1 ]]; then
-  printf 'CC=%s\nCXX=%s\nPSLOG_HOST_EXECUTOR=%s\n' "$CC" "$CXX" "$host_executor"
+  printf 'CC=%s\nCXX=%s\n' "$CC" "$CXX"
   exit 0
 fi
 
@@ -44,13 +38,13 @@ cmake --build --preset host
 ctest --preset host
 
 printf '\n== Pure C benchmark rebaseline ==\n'
-"$host_executor" ./build/host/pslog_bench 500000 all
+./build/host/pslog_bench 500000 all
 
 printf '\n== Go vs C benchmark compare ==\n'
 (
   tmpcache="$(mktemp -d)"
   trap 'rm -rf "$tmpcache"' EXIT
   cd gobencher
-  GOCACHE="$tmpcache" go test -exec "$host_executor" ./...
-  GOCACHE="$tmpcache" go test -exec "$host_executor" ./benchmark -run '^$' -bench 'Benchmark(Production|Fixed)Compare' -benchmem -benchtime=200ms -count=1
+  GOCACHE="$tmpcache" go test ./...
+  GOCACHE="$tmpcache" go test ./benchmark -run '^$' -bench 'Benchmark(Production|Fixed)Compare' -benchmem -benchtime=200ms -count=1
 )

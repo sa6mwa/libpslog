@@ -22,9 +22,8 @@ endif()
 if(NOT presets MATCHES "\"PSLOG_BUILD_LUA\": \"OFF\"")
     message(FATAL_ERROR "base preset must keep staged Lua CTest opt-in")
 endif()
-if(presets MATCHES "\"name\": \"debug\",[^\n]*\n[ \t]*\"inherits\": \"base\",[^\n]*\n[ \t]*\"toolchainFile\"" OR
-   presets MATCHES "\"name\": \"host\",[^\n]*\n[ \t]*\"inherits\": \"base\",[^\n]*\n[ \t]*\"toolchainFile\"")
-    message(FATAL_ERROR "standard debug and host presets must remain host-native and must not force a cross or Bootlin toolchain")
+if(NOT presets MATCHES "\"toolchainFile\": \"\\$\{sourceDir\}/cmake/toolchains/host\\.cmake\"")
+    message(FATAL_ERROR "base preset must bootstrap the required Linux Bootlin toolchain")
 endif()
 file(READ "${PSLOG_ROOT}/CMakeLists.txt" cmake_lists)
 if(cmake_lists MATCHES "pkg_check_modules\\(PSLOG_LUA" OR
@@ -62,9 +61,9 @@ foreach(target_id IN ITEMS
 endforeach()
 foreach(native_toolchain IN ITEMS linux-x86_64-gnu.cmake linux-x86_64-musl.cmake)
     file(READ "${PSLOG_ROOT}/cmake/toolchains/${native_toolchain}" native_toolchain_text)
-    if(NOT native_toolchain_text MATCHES "PSLOG_TEST_EXECUTOR" OR
-       NOT native_toolchain_text MATCHES "run_sysroot_binary\\.sh")
-        message(FATAL_ERROR "native Bootlin toolchain is missing its sysroot runtime executor: ${native_toolchain}")
+    if(native_toolchain_text MATCHES "PSLOG_TEST_EXECUTOR" OR
+       native_toolchain_text MATCHES "run_sysroot_binary\\.sh")
+        message(FATAL_ERROR "native Bootlin toolchain must use direct ELF execution: ${native_toolchain}")
     endif()
 endforeach()
 
@@ -88,17 +87,25 @@ endif()
 file(READ "${PSLOG_ROOT}/cmake/toolchains/linux-aflpp.cmake" afl_toolchain)
 if(NOT afl_toolchain MATCHES "set\\(PSLOG_BOOTLIN_C_COMPILER_OVERRIDE \"\\$\\{afl_cc\\}\"\\)" OR
    NOT afl_toolchain MATCHES "pslog_configure_bootlin_toolchain\\(\"x86_64-linux-gnu\"\\)" OR
-   NOT afl_toolchain MATCHES "PSLOG_TEST_EXECUTOR" OR
-   NOT afl_toolchain MATCHES "run_sysroot_binary\\.sh")
-    message(FATAL_ERROR "AFL++ wrappers must select before Bootlin toolchain setup and retain its native sysroot executor")
+   afl_toolchain MATCHES "PSLOG_TEST_EXECUTOR" OR
+   afl_toolchain MATCHES "run_sysroot_binary\\.sh")
+    message(FATAL_ERROR "AFL++ wrappers must select before Bootlin toolchain setup and use direct ELF execution")
 endif()
 file(READ "${PSLOG_ROOT}/cmake/toolchains/pslog_bootlin.cmake" bootlin_toolchain)
 if(bootlin_toolchain MATCHES "IS_EXECUTABLE")
     message(FATAL_ERROR "Bootlin toolchain validation must remain compatible with the CMake 3.21 minimum")
 endif()
-if(NOT lua_interop_runner MATCHES "CMAKE_SYSROOT" OR
-   NOT lua_interop_runner MATCHES "run_sysroot_binary\\.sh" OR
-   NOT lua_interop_runner MATCHES "--library-path" OR
-   NOT lua_interop_runner MATCHES "LD_LIBRARY_PATH=.*sdk_lib_dir")
-    message(FATAL_ERROR "Lua interop consumers must use the selected sysroot loader when configured and direct SDK library paths for native host builds")
+if(NOT lua_interop_runner MATCHES "PSLOG_NONSHIPPED_ELF_LINKER_FLAGS" OR
+   lua_interop_runner MATCHES "run_sysroot_binary\\.sh")
+    message(FATAL_ERROR "Lua interop consumers must carry direct Bootlin ELF runtime metadata on Linux")
+endif()
+if(NOT cmake_lists MATCHES "function\\(pslog_configure_nonshipped_executable" OR
+   NOT cmake_lists MATCHES "--dynamic-linker" OR
+   NOT cmake_lists MATCHES "--disable-new-dtags,-rpath")
+    message(FATAL_ERROR "non-shipped native Linux executables must pin Bootlin ELF runtime metadata")
+endif()
+file(READ "${PSLOG_ROOT}/cmake/toolchains/host.cmake" host_toolchain)
+if(NOT host_toolchain MATCHES "CMAKE_HOST_SYSTEM_NAME STREQUAL \"Linux\"" OR
+   NOT host_toolchain MATCHES "CMAKE_HOST_SYSTEM_NAME STREQUAL \"Darwin\"")
+    message(FATAL_ERROR "host toolchain must require Bootlin on Linux while preserving native macOS compiler selection")
 endif()

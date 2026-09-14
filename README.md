@@ -160,7 +160,8 @@ cmake --preset host
 cmake --build --preset host
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
-  -o example example.c ../build/host/libpslog.a -pthread
+  -o example example.c ../build/host/libpslog.a -pthread \
+  $(sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' ../build/host/CMakeCache.txt)
 ./example
 ```
 
@@ -190,7 +191,8 @@ cmake --build ../build/host --target package-single-header
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
   -I../build/host/generated/include \
-  -o example example.c -pthread
+  -o example example.c -pthread \
+  $(sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' ../build/host/CMakeCache.txt)
 ./example
 ```
 
@@ -357,8 +359,8 @@ and packages `arm64-apple-darwin`.
 
 Toolchain expectations:
 
-- Release, cross, Valgrind, and fuzz presets provision checksum-pinned Bootlin GCC collections through `scripts/cpkt-toolchains.sh`; host-native `debug` and `host` presets use the local development compiler selected by CMake.
-- Bootlin-backed native x86_64 Valgrind and AFL++ execution launch through the selected Bootlin sysroot loader, so they do not depend on a matching host glibc or musl installation. Native memory checking still uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection. Host benchmark and Go/Lua comparison gates use `scripts/run_host_binary.sh`, which runs native host binaries directly and sysroot-backed host binaries through the configured loader.
+- Every Linux preset provisions a checksum-pinned Bootlin GCC collection through `scripts/cpkt-toolchains.sh`; Linux configuration without one fails. On macOS, the local development presets leave compiler selection to the host, while the Darwin release preset uses its configured osxcross collection.
+- Every non-shipped native Linux executable pins the selected Bootlin ELF interpreter and a private DT_RPATH at link time, so CTest, Valgrind, examples, benchmarks, fuzzing, and generated local consumers run directly with the selected runtime. Native memory checking still uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection. Cross-target tests continue to use QEMU with their matching sysroot.
 - `clang-format` and `clangd` are host development tools only. `make clangd` checks the native public C consumer with `build/debug/compile_commands.json`, including its public-header surface. Public declarations use Doxygen comments so hover documentation remains useful in clangd. clangd is not a compiler, target-ABI verifier, package check, or release dependency; cross builds, packages, and releases do not invoke it.
 - The shared toolchain cache is `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}`. Its Bootlin and AFL++ provisioners serialize each collection with a bounded `CPKT_TOOLCHAIN_LOCK_TIMEOUT` (600 seconds by default), and the AFL++ cache identity includes the selected Bootlin collection and sysroot. External dependency archives use `${CPKT_DEPENDENCY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/deps}`. Both survive `make clean`; disposable extracted dependency source state is kept under the active CMake build tree.
 - Cross test execution requires `qemu-aarch64` and `qemu-arm`; each uses the matching Bootlin sysroot.
