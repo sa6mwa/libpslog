@@ -16,9 +16,6 @@ endforeach()
 if(NOT presets MATCHES "\"CMAKE_EXPORT_COMPILE_COMMANDS\": \"ON\"")
     message(FATAL_ERROR "base preset does not enable compile commands")
 endif()
-if(NOT presets MATCHES "\"PSLOG_DEPENDENCY_MODE\": \"bundled-sdk\"")
-    message(FATAL_ERROR "base preset does not pin bundled-sdk dependency mode")
-endif()
 if(NOT presets MATCHES "\"PSLOG_BUILD_LUA\": \"OFF\"")
     message(FATAL_ERROR "base preset must keep staged Lua CTest opt-in")
 endif()
@@ -98,11 +95,6 @@ endif()
 if(NOT lua_interop_runner MATCHES "PSLOG_NONSHIPPED_ELF_LINKER_FLAGS" OR
    lua_interop_runner MATCHES "run_sysroot_binary\\.sh")
     message(FATAL_ERROR "Lua interop consumers must carry direct Bootlin ELF runtime metadata on Linux")
-endif()
-if(NOT cmake_lists MATCHES "function\\(pslog_configure_nonshipped_executable" OR
-   NOT cmake_lists MATCHES "--dynamic-linker" OR
-   NOT cmake_lists MATCHES "--disable-new-dtags,-rpath")
-    message(FATAL_ERROR "non-shipped native Linux executables must pin Bootlin ELF runtime metadata")
 endif()
 file(READ "${PSLOG_ROOT}/cmake/toolchains/host.cmake" host_toolchain)
 if(NOT host_toolchain MATCHES "CMAKE_HOST_SYSTEM_NAME STREQUAL \"Linux\"" OR

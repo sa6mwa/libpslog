@@ -2,11 +2,32 @@
 set -euo pipefail
 
 repo_root=$1
-fixture_root=$(mktemp -d)
+fixture_root=$(mktemp -d "$repo_root/build/afl-resolver-test.XXXXXX")
 cleanup() { rm -rf "$fixture_root"; }
 trap cleanup EXIT HUP INT TERM
 
 source "$repo_root/scripts/cpkt-aflpp.sh"
+
+# Test the repository resolver's publication readiness and failure cleanup.
+ready_root="$fixture_root/ready"
+mkdir -p "$ready_root/bin" "$ready_root/lib/afl"
+for tool in afl-fuzz afl-showmap cpkt-afl-gcc cpkt-afl-g++; do
+  printf '#!/bin/sh\nexit 0\n' > "$ready_root/bin/$tool"
+  chmod +x "$ready_root/bin/$tool"
+done
+touch "$ready_root/lib/afl/afl-gcc-pass.so" "$ready_root/lib/afl/afl-compiler-rt.o" "$ready_root/.cpkt-aflpp-revision-$revision-fixture"
+ready "$ready_root" fixture
+rm "$ready_root/bin/afl-showmap"
+if ready "$ready_root" fixture; then
+  echo 'Resolver accepted a missing afl-showmap' >&2
+  exit 1
+fi
+mkdir "$fixture_root/interrupted"
+if bash -c 'source "$1/scripts/cpkt-aflpp.sh"; install_cleanup_trap -rf "$2"; exit 7' _ "$repo_root" "$fixture_root/interrupted"; then
+  echo 'Cleanup lost the failing exit status' >&2
+  exit 1
+fi
+[[ ! -e "$fixture_root/interrupted" ]]
 
 export CPKT_TOOLCHAIN_CACHE="$fixture_root/cache"
 unset CPKT_TOOLCHAIN_LOCK_TIMEOUT

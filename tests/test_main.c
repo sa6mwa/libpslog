@@ -583,6 +583,7 @@ static int run_terminating_logger_child(int panic_mode, pslog_level min_level,
 #endif
 }
 
+#if !defined(PSLOG_COVERAGE_BUILD)
 static int run_terminating_wrapper_child(int panic_mode, int kvfmt_mode,
                                          pslog_level min_level, char *output,
                                          size_t output_size, int *exit_code,
@@ -692,6 +693,8 @@ static int run_terminating_wrapper_child(int panic_mode, int kvfmt_mode,
   return 0;
 #endif
 }
+
+#endif
 
 static int run_kvfmt_shorter_reused_buffer_child(int use_withf, char *output,
                                                  size_t output_size,
@@ -5048,6 +5051,9 @@ static int test_thread_safe_kvfmt_cache_entry_lifetime(void) {
   for (i = 0u; i < sizeof(threads) / sizeof(threads[0]); ++i) {
     TEST_ASSERT(pthread_join(threads[i], (void **)0) == 0);
     TEST_ASSERT(ctx[i].failed == 0);
+  }
+  /* The sink remains mutable until every writer has joined. */
+  for (i = 0u; i < sizeof(threads) / sizeof(threads[0]); ++i) {
     TEST_ASSERT(count_text_occurrences(sink.data, keys[i]) ==
                 (size_t)ctx[i].iterations);
   }
@@ -5111,6 +5117,9 @@ static int test_thread_safe_withf_kvfmt_cache_entry_lifetime(void) {
   for (i = 0u; i < sizeof(threads) / sizeof(threads[0]); ++i) {
     TEST_ASSERT(pthread_join(threads[i], (void **)0) == 0);
     TEST_ASSERT(ctx[i].failed == 0);
+  }
+  /* The sink remains mutable until every writer has joined. */
+  for (i = 0u; i < sizeof(threads) / sizeof(threads[0]); ++i) {
     TEST_ASSERT(count_text_occurrences(sink.data, keys[i]) ==
                 (size_t)ctx[i].iterations);
   }

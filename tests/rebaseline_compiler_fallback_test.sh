@@ -9,13 +9,13 @@ if [[ ! -f "$cache_file" ]]; then
   exit 1
 fi
 
-host_cc=$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' "$cache_file" | tail -n 1)
+host_cc=$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' "$cache_file" | tail -n 1)
 if [[ -z "$host_cc" || ! -x "$host_cc" ]]; then
   printf 'configured host C compiler is unavailable: %s\n' "${host_cc:-<empty>}" >&2
   exit 1
 fi
 
-cxx=${CXX:-$(command -v c++ 2>/dev/null || true)}
+cxx=$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$cache_file" | tail -n 1)
 if [[ -z "$cxx" || ! -x "$cxx" ]]; then
   printf 'SKIP: no C++ compiler available for rebaseline fallback\n'
   exit 0

@@ -20,7 +20,7 @@ run_go_bench() {
     (
         trap 'rm -rf "$tmpcache"' EXIT
         cd "$repo_root/gobencher"
-        GOCACHE="$tmpcache" go test ./benchmark -run '^$' -bench "$pattern" -benchmem -benchtime="$PSLOG_PERF_GO_BENCHTIME" -count=1
+        GOCACHE="$tmpcache" "$repo_root/scripts/local-go.sh" test ./benchmark -run '^$' -bench "$pattern" -benchmem -benchtime="$PSLOG_PERF_GO_BENCHTIME" -count=1
     ) | tee "$out_file"
 }
 
@@ -120,7 +120,7 @@ tmpcache="$(mktemp -d)"
 (
     trap 'rm -rf "$tmpcache"' EXIT
     cd "$repo_root/gobencher"
-    GOCACHE="$tmpcache" go test ./benchmark -run '^Test(C(LoggerWithPrepared|LoggerPublicWrites|CPublicPreparedParityFixed|CProductionPreparedOutputParity)|CKVFmt(Fixed|Production)OutputParity|LuaPreparedBenchmarkBridgeMatchesRawRun|LuaPreparedTableBenchmarkBridgeMatchesRawRun)$' -count=1
+    GOCACHE="$tmpcache" "$repo_root/scripts/local-go.sh" test ./benchmark -run '^Test(C(LoggerWithPrepared|LoggerPublicWrites|CPublicPreparedParityFixed|CProductionPreparedOutputParity)|CKVFmt(Fixed|Production)OutputParity|LuaPreparedBenchmarkBridgeMatchesRawRun|LuaPreparedTableBenchmarkBridgeMatchesRawRun)$' -count=1
 )
 
 printf '\n== Lua regression gate ==\n'

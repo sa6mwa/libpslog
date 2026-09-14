@@ -15,7 +15,8 @@ execute_process(
 if(NOT interpreter_result EQUAL 0)
     message(FATAL_ERROR "Unable to inspect ELF interpreter: ${interpreter_error}")
 endif()
-if(NOT interpreter_output MATCHES "Requesting program interpreter: ${PSLOG_BOOTLIN_INTERPRETER}")
+string(REGEX MATCH "Requesting program interpreter: ([^]]+)" match "${interpreter_output}")
+if(NOT CMAKE_MATCH_1 STREQUAL PSLOG_BOOTLIN_INTERPRETER)
     message(FATAL_ERROR
         "Non-shipped ELF executable does not pin the selected Bootlin interpreter.\n${interpreter_output}")
 endif()
@@ -30,7 +31,7 @@ if(NOT dynamic_result EQUAL 0)
     message(FATAL_ERROR "Unable to inspect ELF dynamic metadata: ${dynamic_error}")
 endif()
 string(FIND "${dynamic_output}" "${PSLOG_BOOTLIN_RPATH}" rpath_offset)
-if(rpath_offset EQUAL -1)
+if(rpath_offset EQUAL -1 OR NOT dynamic_output MATCHES "\\(RPATH\\)" OR dynamic_output MATCHES "\\(RUNPATH\\)")
     message(FATAL_ERROR
         "Non-shipped ELF executable does not carry its Bootlin DT_RPATH.\n${dynamic_output}")
 endif()
@@ -49,6 +50,15 @@ if(sysroot_runtime_offset EQUAL -1)
     message(FATAL_ERROR
         "Bootlin loader resolution did not use its selected sysroot.\n${runtime_output}${runtime_error}")
 endif()
+
+string(REGEX MATCHALL "=> /[^ \n]+" resolved_objects "${runtime_output}${runtime_error}")
+foreach(object IN LISTS resolved_objects)
+    string(REPLACE "=> " "" object "${object}")
+    string(FIND "${object}" "${PSLOG_BOOTLIN_SYSROOT}/" contained)
+    if(NOT contained EQUAL 0)
+        message(FATAL_ERROR "Bootlin loader resolved a runtime outside its sysroot: ${object}")
+    endif()
+endforeach()
 
 execute_process(
     COMMAND "${PSLOG_BINARY}"

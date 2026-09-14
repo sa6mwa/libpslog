@@ -46,6 +46,29 @@ if(NOT stable_checksum_result EQUAL 0)
         "${stable_checksum_output}${stable_checksum_error}")
 endif()
 
+function(assert_consumer_runtime binary)
+    if(NOT PSLOG_NATIVE_EXECUTION OR NOT PSLOG_BOOTLIN_INTERPRETER)
+        return()
+    endif()
+    execute_process(COMMAND "${PSLOG_READELF}" -l -d "${binary}"
+        OUTPUT_VARIABLE metadata COMMAND_ERROR_IS_FATAL ANY)
+    string(REGEX MATCH "Requesting program interpreter: ([^]]+)" match "${metadata}")
+    if(NOT CMAKE_MATCH_1 STREQUAL PSLOG_BOOTLIN_INTERPRETER OR NOT metadata MATCHES "\\(RPATH\\)")
+        message(FATAL_ERROR "SDK verification consumer lacks private Bootlin runtime metadata: ${binary}")
+    endif()
+    execute_process(COMMAND "${PSLOG_BOOTLIN_INTERPRETER}" --list "${binary}"
+        OUTPUT_VARIABLE objects COMMAND_ERROR_IS_FATAL ANY)
+    string(REGEX MATCHALL "=> /[^ \n]+" paths "${objects}")
+    foreach(path IN LISTS paths)
+        string(REPLACE "=> " "" path "${path}")
+        string(FIND "${path}" "${PSLOG_BOOTLIN_ROOT}/" runtime_match)
+        string(FIND "${path}" "${extracted_package_root}/lib/" sdk_match)
+        if(NOT runtime_match EQUAL 0 AND NOT sdk_match EQUAL 0)
+            message(FATAL_ERROR "SDK verification consumer loaded an unexpected library: ${path}")
+        endif()
+    endforeach()
+endfunction()
+
 function(assert_archive_layout archive_path)
     if(NOT EXISTS "${archive_path}")
         message(FATAL_ERROR "missing archive: ${archive_path}")
@@ -207,6 +230,16 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
 find_package(pslog ${PSLOG_VERSION} CONFIG REQUIRED)
 add_executable(pslog_package_consumer main.c)
 target_link_libraries(pslog_package_consumer PRIVATE pslog::pslog)
+target_compile_options(pslog_package_consumer PRIVATE -std=c89 -Wall -Wextra -Wpedantic -Werror)
+include(\"${PSLOG_ROOT}/cmake/pslog_local_runtime.cmake\")
+pslog_configure_nonshipped_executable(pslog_package_consumer)
+add_executable(pslog_package_static main.c)
+target_link_libraries(pslog_package_static PRIVATE pslog::pslog_static)
+target_compile_options(pslog_package_static PRIVATE -std=c89 -Wall -Wextra -Wpedantic -Werror)
+pslog_configure_nonshipped_executable(pslog_package_static)
+separate_arguments(local_link_flags NATIVE_COMMAND \"${PSLOG_EXE_LINKER_FLAGS}\")
+target_link_options(pslog_package_consumer PRIVATE \${local_link_flags})
+target_link_options(pslog_package_static PRIVATE \${local_link_flags})
 ")
     file(WRITE "${cmake_consumer_root}/main.c"
 "#include <pslog.h>
@@ -254,7 +287,18 @@ int main(void) {
             "stderr:\n${cmake_consumer_build_stderr}")
     endif()
 
-    find_program(PKG_CONFIG_BIN NAMES pkg-config)
+    string(REPLACE "|" ";" runner "${PSLOG_CROSSCOMPILING_EMULATOR}")
+    if(NOT PSLOG_CROSSCOMPILING OR PSLOG_NATIVE_EXECUTION OR runner)
+        foreach(binary pslog_package_consumer pslog_package_static)
+            assert_consumer_runtime("${cmake_consumer_build}/${binary}")
+            execute_process(COMMAND ${runner} "${cmake_consumer_build}/${binary}" RESULT_VARIABLE run_result)
+            if(NOT run_result EQUAL 0)
+                message(FATAL_ERROR "Installed SDK consumer failed: ${binary}: ${run_result}")
+            endif()
+        endforeach()
+    endif()
+    separate_arguments(local_flags NATIVE_COMMAND "${PSLOG_EXE_LINKER_FLAGS}")
+    find_program(PKG_CONFIG_BIN NAMES pkg-config REQUIRED)
     if(PKG_CONFIG_BIN)
         execute_process(
             COMMAND "${CMAKE_COMMAND}" -E env
@@ -273,8 +317,9 @@ int main(void) {
 
         separate_arguments(pkg_config_compile_flags NATIVE_COMMAND "${pkg_config_flags}")
         execute_process(
-            COMMAND "${PSLOG_C_COMPILER}" "-o" "${cmake_consumer_root}/pkg-config-consumer"
+            COMMAND "${PSLOG_C_COMPILER}" -std=c89 -Wall -Wextra -Wpedantic -Werror "-o" "${cmake_consumer_root}/pkg-config-consumer"
                     "${cmake_consumer_root}/main.c" ${pkg_config_compile_flags}
+                    ${local_flags} "-Wl,-rpath,${extracted_package_root}/lib"
             RESULT_VARIABLE pkg_config_compile_result
             OUTPUT_VARIABLE pkg_config_compile_stdout
             ERROR_VARIABLE pkg_config_compile_stderr
@@ -284,6 +329,13 @@ int main(void) {
                 "failed to compile pkg-config consumer against archive metadata: ${archive_path}\n"
                 "stdout:\n${pkg_config_compile_stdout}\n"
                 "stderr:\n${pkg_config_compile_stderr}")
+        endif()
+        if(NOT PSLOG_CROSSCOMPILING OR PSLOG_NATIVE_EXECUTION OR runner)
+            assert_consumer_runtime("${cmake_consumer_root}/pkg-config-consumer")
+            execute_process(COMMAND ${runner} "${cmake_consumer_root}/pkg-config-consumer" RESULT_VARIABLE result)
+            if(NOT result EQUAL 0)
+                message(FATAL_ERROR "pkg-config SDK consumer failed: ${result}")
+            endif()
         endif()
     endif()
 endfunction()

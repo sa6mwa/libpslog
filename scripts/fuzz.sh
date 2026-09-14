@@ -34,6 +34,12 @@ main() {
     printf 'AFL++ recorded a crashing or hanging input: %s\n' "$failure_input" >&2
     return 1
   fi
+  local executions
+  executions=$(awk '$1 == "execs_done" { print $3 }' "$output/default/fuzzer_stats")
+  if [[ ! "$executions" =~ ^[0-9]+$ || "$executions" -eq 0 ]]; then
+    printf 'AFL++ did not report any executed inputs: %s\n' "$output/default/fuzzer_stats" >&2
+    return 1
+  fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

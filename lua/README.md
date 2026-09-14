@@ -414,10 +414,10 @@ Run them from the repository root after building the local rock tree:
 ```sh
 make lua-rock
 eval "$(make lua-env)"
-lua lua/examples/example.lua
-lua lua/examples/basic.lua
-lua lua/examples/from_env.lua
-lua lua/examples/callback.lua
+build/lua-runtime/pslog_lua lua/examples/example.lua
+build/lua-runtime/pslog_lua lua/examples/basic.lua
+build/lua-runtime/pslog_lua lua/examples/from_env.lua
+build/lua-runtime/pslog_lua lua/examples/callback.lua
 ```
 
 ## Local Development
@@ -431,10 +431,13 @@ make lua-rock
 This installs the Bootlin-built public C SDK under `build/lua-sdk/` first. The
 rock, Lua/C interop checks, and embedded Lua benchmarks compile and link only
 against that installed local SDK, while Lua 5.5 headers and its static runtime
-are staged separately under `build/lua-host/`.
+are built from checksum-pinned Lua 5.5.1 sources with the selected compiler
+and staged under `build/lua-host/`. The local interpreter is
+`build/lua-runtime/pslog_lua`; use it for local module tests and examples.
 
-Lua 5.5 is the only supported Lua runtime. `make lua-env` configures both the
-repo-local rock tree and the local C SDK loader path for the current shell.
+Lua 5.5.1 is the supported Lua runtime. `make lua-env` configures Lua module
+search paths for the repo-local rock tree. Native library paths are private
+to the local interpreter, so host tools keep their own runtime.
 
 Run the Lua tests:
 

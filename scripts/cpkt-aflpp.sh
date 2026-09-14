@@ -9,6 +9,12 @@ archive_sha256=118415843e5d289d63bd6d8f2252c18212978f15ac9e86acbbc75766cd45acde
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 bootlin="$repo_root/scripts/cpkt-toolchains.sh"
 die() { printf 'cpkt-aflpp: %s\n' "$*" >&2; exit 1; }
+install_cleanup_trap() {
+  local option=$1 path=$2 cleanup
+  printf -v cleanup 'status=$?; rm %s -- %q; exit "$status"' "$option" "$path"
+  trap "$cleanup" EXIT
+  trap 'exit 1' HUP INT TERM
+}
 cache() {
   if [[ -n "${CPKT_TOOLCHAIN_CACHE:-}" ]]; then printf '%s\n' "$CPKT_TOOLCHAIN_CACHE"
   elif [[ -n "${XDG_CACHE_HOME:-}" ]]; then printf '%s/c.pkt.systems/toolchains\n' "$XDG_CACHE_HOME"
@@ -32,7 +38,7 @@ collection_id() {
 root() { local identifier=$1; printf '%s/roots/aflplusplus-%s-%s\n' "$(cache)" "$version" "$identifier"; }
 ready() {
   local resolved_root=$1 identifier=$2
-  [[ -x "$resolved_root/bin/afl-fuzz" && -x "$resolved_root/bin/cpkt-afl-gcc" && -x "$resolved_root/bin/cpkt-afl-g++" &&
+  [[ -x "$resolved_root/bin/afl-fuzz" && -x "$resolved_root/bin/afl-showmap" && -x "$resolved_root/bin/cpkt-afl-gcc" && -x "$resolved_root/bin/cpkt-afl-g++" &&
      -f "$resolved_root/lib/afl/afl-gcc-pass.so" && -f "$resolved_root/lib/afl/afl-compiler-rt.o" &&
      -f "$resolved_root/.cpkt-aflpp-revision-$revision-$identifier" ]]
 }
@@ -70,6 +76,7 @@ ensure() {
   [[ -x "$cc" && -x "$cxx" && -f "$bootlin_root/include/gmp.h" ]] || die 'Bootlin GCC plugin headers are incomplete'
   if ! [[ -f "$archive" ]] || ! printf '%s  %s\n' "$archive_sha256" "$archive" | sha256sum -c - >/dev/null 2>&1; then
     rm -f "$archive"; download="$archive.tmp.$$"
+    install_cleanup_trap -f "$download"
     if command -v curl >/dev/null; then
       curl -fL --retry 3 --connect-timeout 20 -o "$download" "https://github.com/AFLplusplus/AFLplusplus/archive/refs/tags/v${version}.tar.gz" || { rm -f "$download"; die 'AFL++ download failed'; }
     elif command -v wget >/dev/null; then
@@ -77,8 +84,9 @@ ensure() {
     else die 'curl or wget is required to download AFL++'; fi
     printf '%s  %s\n' "$archive_sha256" "$download" | sha256sum -c - >/dev/null || { rm -f "$download"; die 'AFL++ checksum mismatch'; }
     mv "$download" "$archive"
+    trap - EXIT HUP INT TERM
   fi
-  tmp="$cache_root/.aflplusplus.$$"; trap 'rm -rf "${tmp:-}"' EXIT HUP INT TERM
+  tmp="$cache_root/.aflplusplus.$$"; install_cleanup_trap -rf "$tmp"
   mkdir -p "$tmp/extract" "$tmp/root/bin" "$tmp/root/lib/afl"
   tar -xzf "$archive" -C "$tmp/extract"; source="$tmp/extract/AFLplusplus-$version"
   [[ -d "$source" ]] || die "unexpected archive layout: $archive_name"

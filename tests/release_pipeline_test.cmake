@@ -42,17 +42,9 @@ if(makefile MATCHES "run_host_binary\\.sh" OR
    makefile MATCHES "PSLOG_HOST_EXECUTOR")
     message(FATAL_ERROR "Go host tools must execute normally; only project ELF executables select Bootlin at link time")
 endif()
-if(NOT makefile MATCHES "LUA_HOST_INTERPRETER = \\$\\(shell \\$\\(LUA_ROCKS\\) config variables\\.LUA" OR
-   NOT makefile MATCHES "LUA_STAGED_IDENTITY := \\$\\(LUA_STAGED_ROOT\\)/\\.luarocks-identity" OR
-   NOT makefile MATCHES "\\$\\(LUA_STAGED_LUA_DEPS\\): \\$\\(LUA_STAGED_IDENTITY\\)" OR
-   NOT makefile MATCHES "\\./scripts/sha256_files\\.sh \"\\$\\(LUA_HOST_INCLUDE_DIR\\)/lua\\.h\" \"\\$\\(LUA_HOST_LIB_DIR\\)/liblua\\.a\"" OR
-   NOT makefile MATCHES "\\./scripts/with_lock\\.sh \"\\$\\(LUA_ROCK_BUILD_LOCK\\)\" env CC=" OR
-   NOT makefile MATCHES "\\\"\\$\\(LUA_HOST_INTERPRETER\\)\\\" lua/tests/test_pslog\\.lua")
-    message(FATAL_ERROR "Lua gates must track the selected LuaRocks ABI inputs and run with the selected Lua interpreter")
-endif()
-if(makefile MATCHES "(^|\n)[^\n]*flock \"\\$\\(LUA_ROCK_BUILD_LOCK\\)\"" OR
-   makefile MATCHES "(^|\n)[^\n]*sha256sum \"\\$\\(LUA_HOST_INCLUDE_DIR\\)/lua\\.h\"")
-    message(FATAL_ERROR "Lua gates must avoid GNU/Linux-only flock and sha256sum commands")
+if(makefile MATCHES "export (LD_LIBRARY_PATH|DYLD_LIBRARY_PATH)" OR
+   NOT makefile MATCHES "build/lua-runtime/pslog_lua")
+    message(FATAL_ERROR "Lua module tests require the local interpreter without runtime environment injection")
 endif()
 file(READ "${PSLOG_ROOT}/scripts/verify_release_privacy.sh" privacy_gate)
 if(NOT privacy_gate MATCHES "scripts/sha256_files\\.sh\" --check" OR

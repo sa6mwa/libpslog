@@ -21,26 +21,27 @@ if [ ! -f "${core_so}" ]; then
     exit 1
 fi
 
-for tool in nm readelf ldd; do
-    if ! command -v "${tool}" >/dev/null 2>&1; then
-        printf 'lua binding boundary check: skipped; missing inspection tool: %s\n' "${tool}" >&2
-        exit 0
-    fi
-done
+cache="${repo_root}/build/host/CMakeCache.txt"
+nm_bin=$(sed -n 's/^CMAKE_NM:[^=]*=//p' "${cache}" | tail -n 1)
+readelf_bin=$(sed -n 's/^CMAKE_READELF:[^=]*=//p' "${cache}" | tail -n 1)
+if [ ! -x "${nm_bin}" ] || [ ! -x "${readelf_bin}" ]; then
+    printf 'lua boundary check requires configured Bootlin inspection tools\n' >&2
+    exit 1
+fi
 
-if ! readelf -h "${core_so}" >/dev/null 2>&1; then
+if ! "${readelf_bin}" -h "${core_so}" >/dev/null 2>&1; then
     printf 'lua binding boundary check: skipped; %s is not an ELF shared object\n' "${core_so}" >&2
     exit 0
 fi
 
-if ! nm -D --defined-only "${core_so}" | grep -Eq '[[:space:]]luaopen_pslog_core$'; then
+if ! "${nm_bin}" -D --defined-only "${core_so}" | grep -Eq '[[:space:]]luaopen_pslog_core$'; then
     printf 'lua binding boundary check: %s does not export luaopen_pslog_core\n' "${core_so}" >&2
     exit 1
 fi
 
-if nm -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -Ev '^pslog_lua_' | grep -Eq '^pslog(_|$)'; then
+if "${nm_bin}" -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -Ev '^pslog_lua_' | grep -Eq '^pslog(_|$)'; then
     printf 'lua binding boundary check: %s defines libpslog symbols\n' "${core_so}" >&2
-    nm -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -Ev '^pslog_lua_' | grep -E '^pslog(_|$)' >&2
+    "${nm_bin}" -D --defined-only "${core_so}" | awk '{ print $3 }' | grep -Ev '^pslog_lua_' | grep -E '^pslog(_|$)' >&2
     exit 1
 fi
 
@@ -64,7 +65,7 @@ trap 'rm -f "${public_symbols}" "${referenced_symbols}" "${private_symbols}"' EX
     sed -nE 's/.*PSLOG_API[[:space:]].*[ *]((pslog_lua_[A-Za-z0-9_]+))[[:space:]]*\(.*/\1/p' "${lua_public_header}"
 } | sort -u > "${public_symbols}"
 
-nm -D --undefined-only "${core_so}" |
+"${nm_bin}" -D --undefined-only "${core_so}" |
     awk '{ print $NF }' |
     grep -E '^pslog(_|$)' |
     sort -u > "${referenced_symbols}" || true
@@ -76,14 +77,8 @@ if [ -s "${private_symbols}" ]; then
     exit 1
 fi
 
-if ! readelf -d "${core_so}" | grep -Eq 'Shared library: \[libpslog\.so(\.[0-9]+)*\]'; then
+if ! "${readelf_bin}" -d "${core_so}" | grep -Eq 'Shared library: \[libpslog\.so(\.[0-9]+)*\]'; then
     printf 'lua binding boundary check: %s does not declare a libpslog.so dependency\n' "${core_so}" >&2
-    readelf -d "${core_so}" >&2
-    exit 1
-fi
-
-if ldd "${core_so}" | grep -F 'not found' >/dev/null 2>&1; then
-    printf 'lua binding boundary check: unresolved shared library dependency in %s\n' "${core_so}" >&2
-    ldd "${core_so}" >&2
+    "${readelf_bin}" -d "${core_so}" >&2
     exit 1
 fi

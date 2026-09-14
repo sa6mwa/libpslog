@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$1
-fixture_root=$(mktemp -d)
+fixture_root=$(mktemp -d "$repo_root/build/fuzz-gate-test.XXXXXX")
 cleanup() { rm -rf "$fixture_root"; }
 trap cleanup EXIT HUP INT TERM
 
@@ -22,6 +22,7 @@ make_fake_fuzzer() {
     '  shift' \
     'done' \
     'mkdir -p "$output/default/crashes" "$output/default/hangs"' \
+    'printf "execs_done : 1\n" > "$output/default/fuzzer_stats"' \
     "${mode}" >"$repo_root/fake-afl-fuzz"
   chmod +x "$repo_root/fake-afl-fuzz"
 }
@@ -38,3 +39,15 @@ fi
 
 make_fake_fuzzer ':'
 main smoke 1
+
+make_fake_fuzzer 'printf "execs_done : 0\n" > "$output/default/fuzzer_stats"'
+if main smoke 1; then
+  printf 'fuzz gate accepted zero executions\n' >&2
+  exit 1
+fi
+
+make_fake_fuzzer 'rm "$output/default/fuzzer_stats"'
+if main smoke 1; then
+  printf 'fuzz gate accepted missing execution statistics\n' >&2
+  exit 1
+fi

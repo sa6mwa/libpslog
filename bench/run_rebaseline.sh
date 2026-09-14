@@ -7,13 +7,13 @@ repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 compiler_from_host_cache() {
   local key=$1 cache_file="$repo_root/build/host/CMakeCache.txt" value
   [[ -f "$cache_file" ]] || return 1
-  value=$(sed -n "s/^${key}:FILEPATH=//p" "$cache_file" | tail -n 1)
+  value=$(sed -n "s/^${key}:[^=]*=//p" "$cache_file" | tail -n 1)
   [[ -n "$value" ]] || return 1
   printf '%s\n' "$value"
 }
 
 fallback_cxx() {
-  command -v c++ 2>/dev/null || true
+  [[ $(uname -s) == Darwin ]] && command -v c++ 2>/dev/null || true
 }
 
 CC=${CC:-$(compiler_from_host_cache CMAKE_C_COMPILER || true)}
@@ -45,6 +45,6 @@ printf '\n== Go vs C benchmark compare ==\n'
   tmpcache="$(mktemp -d)"
   trap 'rm -rf "$tmpcache"' EXIT
   cd gobencher
-  GOCACHE="$tmpcache" go test ./...
-  GOCACHE="$tmpcache" go test ./benchmark -run '^$' -bench 'Benchmark(Production|Fixed)Compare' -benchmem -benchtime=200ms -count=1
+  GOCACHE="$tmpcache" "$repo_root/scripts/local-go.sh" test ./...
+  GOCACHE="$tmpcache" "$repo_root/scripts/local-go.sh" test ./benchmark -run '^$' -bench 'Benchmark(Production|Fixed)Compare' -benchmem -benchtime=200ms -count=1
 )
