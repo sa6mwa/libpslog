@@ -19,7 +19,10 @@ endif()
 if(NOT presets MATCHES "\"PSLOG_BUILD_LUA\": \"OFF\"")
     message(FATAL_ERROR "base preset must keep staged Lua CTest opt-in")
 endif()
-if(NOT presets MATCHES "\"toolchainFile\": \"\\$\{sourceDir\}/cmake/toolchains/host\\.cmake\"")
+string(FIND "${presets}"
+    [=["toolchainFile": "${sourceDir}/cmake/toolchains/host.cmake"]=]
+    host_toolchain_offset)
+if(host_toolchain_offset EQUAL -1)
     message(FATAL_ERROR "base preset must bootstrap the required Linux Bootlin toolchain")
 endif()
 file(READ "${PSLOG_ROOT}/CMakeLists.txt" cmake_lists)
