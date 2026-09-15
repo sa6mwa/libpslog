@@ -398,7 +398,8 @@ Useful commands:
 
 ```sh
 make benchmarks-c
-./bench/run_rebaseline.sh
+make perf-gate
+make bench-freeze-baseline
 ```
 
 The benchmark suite covers:

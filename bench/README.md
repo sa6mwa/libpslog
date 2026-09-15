@@ -8,12 +8,13 @@ The benchmark surface is split into two layers:
 For a reproducible local rebaseline from the repository root:
 
 ```sh
-./bench/run_rebaseline.sh
+make bench-freeze-baseline
 ```
 
-That script rebuilds the release binary, runs the matching host test preset,
-runs the full pure C benchmark matrix, then runs the Go-vs-C compare suite in
-`gobencher`.
+This explicitly captures both C and Lua baselines for the current detailed host
+fingerprint after the host tests and benchmark smoke tests pass. It uses the
+same workloads and settings as the gate. Existing baselines change only through
+this explicit action; a normal gate never creates or updates them.
 
 For a hard fail-fast performance regression gate:
 
@@ -21,25 +22,23 @@ For a hard fail-fast performance regression gate:
 make perf-gate
 ```
 
-The Make target supplies the configured host `CC` and `CXX` to cgo and the Lua
-build. For the normal native `host` preset that is the local compiler selected
-by CMake, with `c++` as the fallback C++ compiler for Go/cgo. If the host build
-is sysroot-backed, the same benchmark runner executes binaries through that
-configured loader. Invoke the script directly only when those variables already
-name the intended host toolchain.
+The Make target supplies the configured `CC` and `CXX`: pinned Bootlin on Linux,
+and the native compiler on macOS. Local Linux binaries link their selected
+runtime directly.
 
-That gate builds the host release target, runs the host CTest preset, builds the
-repo-local Lua rock, then checks:
+The gate automatically selects a baseline under `performance-logs/baselines/`.
+It first matches a detailed host fingerprint, then a short-hostname hash. Missing,
+incomplete, or ambiguous matches fail with an actionable error. It prints the
+selected baseline hash and match type before building or measuring. See the
+[identity format](../performance-logs/README.md) for registering aliases.
 
-- pure C `pslog_bench` rows against `performance-logs/pure-c-baseline.txt`
-- embedded Lua 5.5 `jsonLua` and table-form rows against
-  `performance-logs/lua-baseline.txt`
+After building and testing the host target and local Lua rock, it checks C
+`pslog_bench` rows and embedded Lua JSON/table-form rows against that host's pair.
 
 By default, pure C and Lua rows may be up to `50%` slower than the checked-in
 baselines. Override those limits with `PSLOG_PERF_C_TOLERANCE` and
 `PSLOG_PERF_LUA_TOLERANCE` when running on a controlled machine. The pure C
-run uses `taskset -c 0` when available because the current C baseline was
-recorded that way; override the CPU with `PSLOG_PERF_CPU`, or set it to an
+run uses `taskset -c 0` when available by default; override the CPU with `PSLOG_PERF_CPU`, or set it to an
 empty value to disable pinning. The script still prints an observational
 Go-vs-C compare, but Go-relative timing no longer defines the hard pass/fail
 contract.
@@ -53,11 +52,12 @@ The committed source of truth for that production dataset is
 `bench_production_dataset.c`. Other benchmark fixture forms are generated from
 it as build artifacts when needed.
 
-Committed benchmark artifacts belong in
-[performance-logs/](../performance-logs/README.md), not under `build/`. Treat
-`performance-logs/pure-c-baseline.txt` and
-`performance-logs/lua-baseline.txt` as the current checked-in baselines when
-recording new comparison runs.
+Committed baselines and historical runs belong in
+[performance-logs/](../performance-logs/README.md). Raw hostnames are never written
+to new baseline metadata. Compiler provenance is recorded, but compiler changes
+do not select a new host baseline: their performance impact remains observable.
+A fresh baseline establishes a reference for future changes; it does not prove
+that earlier changes had no performance regressions.
 
 ## Pure C Benchmarks
 

@@ -46,12 +46,14 @@ make -C .. elevatorpitch ELEVATORPITCH_ARGS='-duration=3s -interval=100ms -limit
 make -C .. elevatorpitch ELEVATORPITCH_ARGS='-include-quill'
 ```
 
-From the repository root, `./bench/run_rebaseline.sh` runs the pure C benchmark matrix first and then this Go-vs-C compare suite.
+From the repository root, `make bench-freeze-baseline` intentionally captures
+the current host’s C and Lua performance baselines, including this compare suite.
 
-If you want a fail-fast gate instead of an observational rebaseline, run:
+To compare against the automatically selected host baseline, run from the
+repository root:
 
 ```sh
-./bench/run_perf_gate.sh
+make perf-gate
 ```
 
 That script uses a fresh temporary `GOCACHE` so stale cgo objects do not make the C compare path look broken or artificially slow after header or ABI changes.

@@ -121,6 +121,7 @@ RELEASE_TIMING_FILE := $(CURDIR)/build/release-timings.tsv
 	gobencher-tests \
 	prepare-gobencher-data \
 	perf-gate \
+	bench-freeze-baseline \
 	cross-build \
 	cross-test \
 	test-cross \
@@ -175,7 +176,8 @@ help:
 		'make benchmarks      Alias for make benchmarks-all.' \
 		'make elevatorpitch   Run the live Go/C/Lua comparison chart.' \
 		'make gobencher-tests Run all Go gobencher tests.' \
-		'make perf-gate       Run the Go-vs-C performance gate.' \
+		'make perf-gate       Compare performance against this host’s baseline.' \
+		'make bench-freeze-baseline  Intentionally capture this host’s C/Lua baseline.' \
 		'make cross-build     Build all non-host cross release presets.' \
 		'make cross-test      Test all non-host cross release presets.' \
 		'make test-cross      Alias for make cross-test.' \
@@ -245,6 +247,9 @@ test-host: build-host
 
 gobencher-tests: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
 	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" "$(CURDIR)/scripts/local-go.sh" test -a ./...
+
+bench-freeze-baseline: build-host lua-rock
+	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./bench/run_rebaseline.sh
 
 perf-gate: build-host lua-rock
 	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./bench/run_perf_gate.sh

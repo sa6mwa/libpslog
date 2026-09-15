@@ -29,22 +29,4 @@ if [[ "${PSLOG_REBASELINE_VALIDATE_ONLY:-}" = 1 ]]; then
   exit 0
 fi
 
-cd "$repo_root"
-
-cmake --preset host \
-  -DPSLOG_BENCHMARK_WITH_LIBLOGGER=OFF \
-  -DPSLOG_BENCHMARK_WITH_QUILL=OFF
-cmake --build --preset host
-ctest --preset host
-
-printf '\n== Pure C benchmark rebaseline ==\n'
-./build/host/pslog_bench 500000 all
-
-printf '\n== Go vs C benchmark compare ==\n'
-(
-  tmpcache="$(mktemp -d)"
-  trap 'rm -rf "$tmpcache"' EXIT
-  cd gobencher
-  GOCACHE="$tmpcache" "$repo_root/scripts/local-go.sh" test ./...
-  GOCACHE="$tmpcache" "$repo_root/scripts/local-go.sh" test ./benchmark -run '^$' -bench 'Benchmark(Production|Fixed)Compare' -benchmem -benchtime=200ms -count=1
-)
+exec "$repo_root/bench/run_perf_gate.sh" --freeze-baseline
