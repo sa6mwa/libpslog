@@ -1,0 +1,68 @@
+# pslog_perf_artifact: lua-baseline
+# host: fingerprint-md5 cb23cc491c905a4b9cb9b9af38727901
+# measured_commit: ccf5b4bd1e720786651d9757cfb9ed151dd0b503
+# worktree: modified
+# date: 2026-09-15T10:16:45Z
+# compiler: x86_64-linux-gcc.br_real (toolchains.bootlin.com 2026.08-1) 15.3.0
+# cmake_preset: host; liblogger off; quill off
+# run_count: 1; summary: raw benchmark rows
+# C: iterations=200000; requested_cpu=0; taskset=available
+# Lua/Go: benchtime=200ms; count=1; pinning=none
+goos: linux
+goarch: amd64
+pkg: github.com/sa6mwa/libpslog/gobencher/benchmark
+cpu: AMD EPYC-Rome-v5 Processor
+BenchmarkProductionCompare/jsonGo-4         	  341994	       677.8 ns/op	       372.2 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsonCffi-4       	   44719	      5046 ns/op	       372.4 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsonCprepared-4  	  491577	       475.6 ns/op	       372.4 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsonC-4          	  515072	       394.4 ns/op	       372.4 bytes/op	       392.5 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsonCkvfmt-4     	  291064	       744.2 ns/op	       372.4 bytes/op	       740.6 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsonCraw-4       	  293520	       767.5 ns/op	       372.4 bytes/op	       764.1 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsoncolorGo-4    	  226928	      1051 ns/op	       622.8 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsoncolorCffi-4  	   45994	      5178 ns/op	       575.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsoncolorCprepared-4         	  349446	       651.4 ns/op	       575.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsoncolorC-4                 	  405822	       544.7 ns/op	       575.1 bytes/op	       542.3 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsoncolorCkvfmt-4            	  253040	       872.3 ns/op	       575.1 bytes/op	       868.8 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsoncolorCraw-4              	  234578	       932.1 ns/op	       575.1 bytes/op	       928.0 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consoleGo-4                  	  348856	       680.0 ns/op	       288.5 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consoleCffi-4                	   45376	      5240 ns/op	       288.5 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consoleCprepared-4           	  340965	       656.1 ns/op	       288.5 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consoleC-4                   	  425610	       581.7 ns/op	       288.5 bytes/op	       579.2 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consoleCkvfmt-4              	  343287	       635.6 ns/op	       288.5 bytes/op	       633.1 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consoleCraw-4                	  222481	       974.2 ns/op	       288.5 bytes/op	       969.9 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consolecolorGo-4             	  299620	       809.6 ns/op	       512.0 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consolecolorCffi-4           	   45223	      5162 ns/op	       508.0 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consolecolorCprepared-4      	  358894	       648.1 ns/op	       508.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consolecolorC-4              	  375312	       551.9 ns/op	       508.0 bytes/op	       550.4 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consolecolorCkvfmt-4         	  346123	       647.4 ns/op	       508.0 bytes/op	       645.9 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/consolecolorCraw-4           	  225700	       959.7 ns/op	       508.1 bytes/op	       955.6 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkProductionCompare/jsonLua-4                    	  285128	       849.0 ns/op	       171.9 bytes/op	       838.0 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonGo-4                          	  524401	       416.9 ns/op	       125.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonCffi-4                        	  196929	      1195 ns/op	       125.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonCprepared-4                   	  689060	       320.9 ns/op	       125.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonC-4                           	 1149333	       207.9 ns/op	       125.1 bytes/op	       207.3 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonCkvfmt-4                      	  605521	       342.8 ns/op	       125.1 bytes/op	       341.4 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonCraw-4                        	  689216	       301.3 ns/op	       125.1 bytes/op	       300.3 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsoncolorGo-4                     	  403549	       566.0 ns/op	       254.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsoncolorCffi-4                   	  192229	      1235 ns/op	       230.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsoncolorCprepared-4              	  553525	       401.8 ns/op	       230.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsoncolorC-4                      	  805174	       294.6 ns/op	       230.1 bytes/op	       293.6 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsoncolorCkvfmt-4                 	  582788	       426.0 ns/op	       230.1 bytes/op	       424.2 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsoncolorCraw-4                   	  654663	       369.1 ns/op	       230.1 bytes/op	       367.4 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consoleGo-4                       	  683923	       353.4 ns/op	        70.07 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consoleCffi-4                     	  188984	      1236 ns/op	        70.07 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consoleCprepared-4                	  721443	       314.2 ns/op	        70.07 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consoleC-4                        	 1000000	       205.8 ns/op	        70.07 bytes/op	       205.0 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consoleCkvfmt-4                   	  801096	       307.3 ns/op	        70.07 bytes/op	       305.9 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consoleCraw-4                     	  847464	       279.0 ns/op	        70.07 bytes/op	       278.1 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consolecolorGo-4                  	  566419	       413.0 ns/op	       172.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consolecolorCffi-4                	  201146	      1198 ns/op	       168.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consolecolorCprepared-4           	  668223	       313.2 ns/op	       168.1 bytes/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consolecolorC-4                   	  975248	       213.3 ns/op	       168.1 bytes/op	       212.2 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consolecolorCkvfmt-4              	  774429	       312.5 ns/op	       168.1 bytes/op	       311.3 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/consolecolorCraw-4                	  799768	       296.2 ns/op	       168.1 bytes/op	       295.3 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedCompare/jsonLua-4                         	  449899	       540.6 ns/op	       125.1 bytes/op	       534.3 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkLuaTableForm/Production-4                      	  217486	      1146 ns/op	       171.8 bytes/op	      1136 c_ns/op	       0 B/op	       0 allocs/op
+BenchmarkLuaTableForm/Fixed-4                           	  358332	       673.3 ns/op	       125.1 bytes/op	       667.9 c_ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/sa6mwa/libpslog/gobencher/benchmark	15.560s

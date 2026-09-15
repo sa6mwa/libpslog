@@ -14,9 +14,9 @@ esac
 perf_host_identity
 baseline_root="$repo_root/performance-logs/baselines"
 if [[ "$freeze" == 0 ]]; then
-    baseline_dir=$(perf_select_baseline "$baseline_root" "$PERF_FINGERPRINT_HASH" "$PERF_HOSTNAME_HASH")
+    baseline_dir=$(perf_select_baseline "$baseline_root" "$PERF_FINGERPRINT_HASH" "$PERF_NODENAME_HASH")
 else
-    baseline_dir=$(perf_capture_baseline_dir "$baseline_root" "$PERF_FINGERPRINT_HASH" "$PERF_HOSTNAME_HASH")
+    baseline_dir=$(perf_capture_baseline_dir "$baseline_root" "$PERF_FINGERPRINT_HASH" "$PERF_NODENAME_HASH")
 fi
 mkdir -p "$repo_root/build"
 scratch=$(mktemp -d "$repo_root/build/perf-gate.XXXXXX")

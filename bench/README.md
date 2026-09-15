@@ -27,7 +27,7 @@ and the native compiler on macOS. Local Linux binaries link their selected
 runtime directly.
 
 The gate automatically selects a baseline under `performance-logs/baselines/`.
-It first matches a detailed host fingerprint, then a short-hostname hash. Missing,
+It first matches a detailed host fingerprint, then a `uname -n` hash. Missing,
 incomplete, or ambiguous matches fail with an actionable error. It prints the
 selected baseline hash and match type before building or measuring. See the
 [identity format](../performance-logs/README.md) for registering aliases.

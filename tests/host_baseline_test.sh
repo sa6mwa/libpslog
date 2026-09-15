@@ -23,7 +23,7 @@ b=$(printf b | perf_md5)
 c=$(printf c | perf_md5)
 [[ $(printf abc | perf_md5) == 900150983cd24fb0d6963f7d28e17f72 ]] || fail 'MD5 mismatch'
 expect_failure 'no performance baseline' perf_select_baseline "$scratch/baselines" "$a" "$b"
-fixture fallback "hostname-md5 $b"
+fixture fallback "nodename-md5 $b"
 [[ $(perf_select_baseline "$scratch/baselines" "$a" "$b") == "$scratch/baselines/fallback" ]] || fail fallback
 [[ $(perf_capture_baseline_dir "$scratch/baselines" "$a" "$b") == "$scratch/baselines/$a" ]] || fail 'capture overwrites fallback'
 fixture precise "fingerprint-md5 $a"
@@ -32,13 +32,13 @@ fixture precise "fingerprint-md5 $a"
 mkdir "$scratch/baselines/$c"
 expect_failure 'without matching identity' perf_capture_baseline_dir "$scratch/baselines" "$c" "$b"
 # Multiple registered aliases in one baseline.
-printf 'fingerprint-md5 %s\nhostname-md5 %s\n' "$c" "$a" >> "$scratch/baselines/precise/identity"
+printf 'fingerprint-md5 %s\nnodename-md5 %s\n' "$c" "$a" >> "$scratch/baselines/precise/identity"
 [[ $(perf_select_baseline "$scratch/baselines" "$c" "$b") == "$scratch/baselines/precise" ]] || fail alias
 [[ $(perf_capture_baseline_dir "$scratch/baselines" "$c" "$b") == "$scratch/baselines/precise" ]] || fail 'capture ignores precise alias'
 fixture duplicate "fingerprint-md5 $a"
 expect_failure ambiguous perf_select_baseline "$scratch/baselines" "$a" "$b"
 expect_failure ambiguous perf_capture_baseline_dir "$scratch/baselines" "$a" "$b"
-printf 'hostname-md5 %s\n' "$b" > "$scratch/baselines/duplicate/identity"
+printf 'nodename-md5 %s\n' "$b" > "$scratch/baselines/duplicate/identity"
 expect_failure ambiguous perf_select_baseline "$scratch/baselines" "$b" "$b"
 # Ambiguous fallbacks do not override a unique precise match.
 [[ $(perf_select_baseline "$scratch/baselines" "$a" "$b") == "$scratch/baselines/precise" ]] || fail precedence
@@ -48,21 +48,20 @@ printf 'fingerprint-md5 invalid\n' > "$scratch/baselines/precise/identity"
 expect_failure invalid perf_select_baseline "$scratch/baselines" "$a" "$b"
 # Exercise real native discovery, plus deterministic macOS discovery and changes.
 perf_host_identity
-[[ "$PERF_FINGERPRINT_HASH" =~ ^[0-9a-f]{32}$ && "$PERF_HOSTNAME_HASH" =~ ^[0-9a-f]{32}$ ]] || fail native
+[[ "$PERF_FINGERPRINT_HASH" =~ ^[0-9a-f]{32}$ && "$PERF_NODENAME_HASH" =~ ^[0-9a-f]{32}$ ]] || fail native
 (
-    hostname() { [[ "$1" == -s ]] || return 1; printf 'fixture-host\n'; }
-    uname() { case "$1" in -s) printf 'Darwin\n';; -m) printf 'arm64\n';; *) return 1;; esac; }
+    uname() { case "$1" in -n) printf 'fixture-node.example.test\n';; -s) printf 'Darwin\n';; -m) printf 'arm64\n';; *) return 1;; esac; }
     fixture_cpu='Apple M2'
     sysctl() { case "$2" in machdep.cpu.brand_string) printf '%s\n' "$fixture_cpu";; hw.logicalcpu) printf '8\n';; *) return 1;; esac; }
     perf_host_identity
     first=$PERF_FINGERPRINT_HASH
-    name=$PERF_HOSTNAME_HASH
-    [[ "$name" == "$(printf fixture-host | perf_md5)" ]] || fail 'short hostname hash'
+    name=$PERF_NODENAME_HASH
+    [[ "$name" == "$(printf fixture-node.example.test | perf_md5)" ]] || fail 'node name hash'
     perf_host_identity
     [[ "$first" == "$PERF_FINGERPRINT_HASH" ]] || fail unstable
     fixture_cpu='Apple M3'
     perf_host_identity
-    [[ "$first" != "$PERF_FINGERPRINT_HASH" && "$name" == "$PERF_HOSTNAME_HASH" ]] || fail 'hardware distinction'
+    [[ "$first" != "$PERF_FINGERPRINT_HASH" && "$name" == "$PERF_NODENAME_HASH" ]] || fail 'hardware distinction'
     fixture_cpu=
     expect_failure 'complete benchmark host identity' perf_host_identity
 )
@@ -77,8 +76,8 @@ expect_failure 'performance gate failed' "$repo_root/bench/check_perf_baseline.s
 expect_failure 'missing baseline' "$repo_root/bench/check_perf_baseline.sh" "$scratch/base" "$scratch/base" 0.50 c_ns/op row
 # The real entry point must stop on an unknown host, before compiler/build work.
 (
-    hostname() { printf 'pslog-nonexistent-test-host-7f02a6\n'; }
-    export -f hostname
+    uname() { case "$1" in -n) printf 'pslog-nonexistent-test-node-7f02a6\n';; -s) command uname -s;; -m) command uname -m;; *) command uname "$@";; esac; }
+    export -f uname
     perf_host_identity
     expect_failure 'no performance baseline' bash "$repo_root/bench/run_perf_gate.sh"
     expect_failure 'requires CC' env CC=/nonexistent bash "$repo_root/bench/run_perf_gate.sh" --freeze-baseline

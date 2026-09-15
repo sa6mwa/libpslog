@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared host identity and baseline selection. No plaintext hostname is persisted.
+# Shared host identity and baseline selection. No plaintext node name is persisted.
 
 perf_md5() {
     if command -v md5sum >/dev/null 2>&1; then
@@ -13,8 +13,8 @@ perf_md5() {
 }
 
 perf_host_identity() {
-    local short_name os arch cpu count
-    short_name=$(hostname -s) || return 1
+    local node_name os arch cpu count
+    node_name=$(uname -n) || return 1
     os=$(uname -s) || return 1
     arch=$(uname -m) || return 1
     case "$os" in
@@ -28,25 +28,25 @@ perf_host_identity() {
             ;;
         *) printf 'unsupported benchmark host OS: %s\n' "$os" >&2; return 1 ;;
     esac
-    if [[ -z "$short_name" || -z "$cpu" || ! "$count" =~ ^[1-9][0-9]*$ ]]; then
+    if [[ -z "$node_name" || -z "$cpu" || ! "$count" =~ ^[1-9][0-9]*$ ]]; then
         printf 'cannot determine complete benchmark host identity\n' >&2
         return 1
     fi
-    PERF_HOSTNAME_HASH=$(printf '%s' "$short_name" | perf_md5) || return 1
+    PERF_NODENAME_HASH=$(printf '%s' "$node_name" | perf_md5) || return 1
     PERF_FINGERPRINT_HASH=$(printf 'v1\nhost=%s\nos=%s\narch=%s\ncpu=%s\nlogical_cpus=%s\n' \
-        "$short_name" "$os" "$arch" "$cpu" "$count" | perf_md5) || return 1
+        "$node_name" "$os" "$arch" "$cpu" "$count" | perf_md5) || return 1
 }
 
 perf_select_baseline() {
-    local root=$1 fingerprint=$2 hostname_hash=$3 scope=${4:-all} kind wanted identity match
-    # Search all precise aliases before considering any hostname alias.
-    for kind in fingerprint-md5 hostname-md5; do
-        [[ "$scope" != fingerprint-only || "$kind" != hostname-md5 ]] || break
-        if [[ "$kind" == fingerprint-md5 ]]; then wanted=$fingerprint; else wanted=$hostname_hash; fi
+    local root=$1 fingerprint=$2 node_name_hash=$3 scope=${4:-all} kind wanted identity match
+    # Search all precise aliases before considering any node-name alias.
+    for kind in fingerprint-md5 nodename-md5; do
+        [[ "$scope" != fingerprint-only || "$kind" != nodename-md5 ]] || break
+        if [[ "$kind" == fingerprint-md5 ]]; then wanted=$fingerprint; else wanted=$node_name_hash; fi
         match=
         for identity in "$root"/*/identity; do
             [[ -f "$identity" ]] || continue
-            if ! awk 'NF && $1 !~ /^#/ {if (NF != 2 || ($1 != "fingerprint-md5" && $1 != "hostname-md5") || length($2) != 32 || $2 ~ /[^0-9a-f]/) exit 1}' "$identity"; then
+            if ! awk 'NF && $1 !~ /^#/ {if (NF != 2 || ($1 != "fingerprint-md5" && $1 != "nodename-md5") || length($2) != 32 || $2 ~ /[^0-9a-f]/) exit 1}' "$identity"; then
                 printf 'invalid baseline identity: %s\n' "$identity" >&2
                 return 1
             fi
@@ -69,13 +69,13 @@ perf_select_baseline() {
         fi
     done
     [[ "$scope" != fingerprint-only ]] || return 2
-    printf 'no performance baseline for fingerprint-md5 %s / hostname-md5 %s; run make bench-freeze-baseline\n' "$fingerprint" "$hostname_hash" >&2
+    printf 'no performance baseline for fingerprint-md5 %s / nodename-md5 %s; run make bench-freeze-baseline\n' "$fingerprint" "$node_name_hash" >&2
     return 1
 }
 
 perf_capture_baseline_dir() {
-    local root=$1 fingerprint=$2 hostname_hash=$3 match status
-    if match=$(perf_select_baseline "$root" "$fingerprint" "$hostname_hash" fingerprint-only); then
+    local root=$1 fingerprint=$2 node_name_hash=$3 match status
+    if match=$(perf_select_baseline "$root" "$fingerprint" "$node_name_hash" fingerprint-only); then
         printf '%s\n' "$match"
     else
         status=$?
