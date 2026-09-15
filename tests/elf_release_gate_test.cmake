@@ -1,4 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
+foreach(required IN ITEMS
+        PSLOG_ROOT PSLOG_BINARY_DIR PSLOG_C_COMPILER PSLOG_READELF
+        PSLOG_BOOTLIN_INTERPRETER PSLOG_BOOTLIN_RUNTIME_SEARCH_PATH)
+    if(NOT DEFINED ${required} OR "${${required}}" STREQUAL "")
+        message(FATAL_ERROR "${required} is required")
+    endif()
+endforeach()
 set(work "${PSLOG_BINARY_DIR}/elf-release-gate-test")
 file(REMOVE_RECURSE "${work}")
 file(MAKE_DIRECTORY "${work}")
@@ -41,8 +48,12 @@ if(result EQUAL 0 OR NOT "${output}${error}" MATCHES "bundles a libc loader")
 endif()
 check(fake-loader "bundles a libc loader" -shared -Wl,-soname,ld-linux-x86-64.so.2)
 if(NOT PSLOG_C_COMPILER MATCHES "musl")
+# Run this negative probe with the selected Bootlin runtime.  A host loader
+# may be older than the collection's glibc and fail before the probe executes.
 execute_process(COMMAND "${PSLOG_C_COMPILER}" "${PSLOG_ROOT}/tests/runtime_probe.c"
     "-DPSLOG_RUNTIME_ROOT=\"/not-the-host-runtime\"" -o "${work}/host-runtime"
+    "-Wl,--dynamic-linker,${PSLOG_BOOTLIN_INTERPRETER}"
+    "-Wl,--disable-new-dtags,-rpath,${PSLOG_BOOTLIN_RUNTIME_SEARCH_PATH}"
     COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "${work}/host-runtime" RESULT_VARIABLE host_result ERROR_VARIABLE host_error)
 if(NOT host_result EQUAL 2 OR NOT host_error MATCHES "Unexpected runtime mapping")

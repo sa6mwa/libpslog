@@ -37,16 +37,21 @@ cache_compiler() {
     sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' "$cache" | tail -n 1
 }
 
+resolver_compiler() {
+    local target=$1
+    if [[ "$target" == aflpp ]]; then
+        "$repo_root/scripts/cpkt-aflpp.sh" discover | sed -n 's/^cc=//p'
+        return
+    fi
+    "$repo_root/scripts/cpkt-toolchains.sh" discover "$target" | sed -n 's/^cc=//p'
+}
+
 stale_cache() {
     local cache=$1 target=$2 expected current
     [[ -f "$cache" ]] || return 1
     current=$(cache_compiler "$cache")
     [[ -n "$current" ]] || return 0
-    if [[ "$target" == aflpp ]]; then
-        [[ "$current" == */afl-gcc-fast ]] || return 0
-        return 1
-    fi
-    expected=$($repo_root/scripts/cpkt-toolchains.sh discover "$target" | sed -n 's/^cc=//p')
+    expected=$(resolver_compiler "$target")
     [[ -n "$expected" && "$current" == "$expected" ]] && return 1
     return 0
 }

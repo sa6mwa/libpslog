@@ -398,6 +398,7 @@ if(PSLOG_BUILD_TESTS)
                 -DPSLOG_C_COMPILER=${CMAKE_C_COMPILER}
                 -DPSLOG_READELF=${CMAKE_READELF}
                 -DPSLOG_BOOTLIN_INTERPRETER=${PSLOG_BOOTLIN_ELF_INTERPRETER}
+                -DPSLOG_BOOTLIN_RUNTIME_SEARCH_PATH=${PSLOG_BOOTLIN_RUNTIME_SEARCH_PATH}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/elf_release_gate_test.cmake)
         set_tests_properties(elf_release_gate_test PROPERTIES
             RUN_SERIAL TRUE LABELS "local;packaging;runtime" TIMEOUT 30)
