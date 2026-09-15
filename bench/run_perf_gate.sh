@@ -85,7 +85,7 @@ fi
 
 cd "$repo_root"
 
-cmake --preset host \
+"$repo_root/scripts/configure_cmake.sh" --preset host -- \
   -DPSLOG_BENCHMARK_WITH_LIBLOGGER=OFF \
   -DPSLOG_BENCHMARK_WITH_QUILL=OFF
 cmake --build --preset host

@@ -101,3 +101,24 @@ if(NOT host_toolchain MATCHES "CMAKE_HOST_SYSTEM_NAME STREQUAL \"Linux\"" OR
    NOT host_toolchain MATCHES "CMAKE_HOST_SYSTEM_NAME STREQUAL \"Darwin\"")
     message(FATAL_ERROR "host toolchain must require Bootlin on Linux while preserving native macOS compiler selection")
 endif()
+file(READ "${PSLOG_ROOT}/scripts/configure_cmake.sh" configure_script)
+foreach(required_text IN ITEMS
+    "cpkt-toolchains.sh\" ensure"
+    "discarding stale compiler state"
+    "x86_64-linux-musl-release"
+    "aarch64-linux-gnu-release"
+    "armhf-linux-musl-release"
+    "arm64-apple-darwin-release")
+    string(FIND "${configure_script}" "${required_text}" required_offset)
+    if(required_offset EQUAL -1)
+        message(FATAL_ERROR "configure_cmake.sh is missing lifecycle routing: ${required_text}")
+    endif()
+endforeach()
+foreach(required_text IN ITEMS
+    "./scripts/configure_cmake.sh --preset"
+    "./scripts/configure_cmake.sh --source cmake/lua --build build/lua-runtime --target host")
+    string(FIND "${makefile_text}" "${required_text}" required_offset)
+    if(required_offset EQUAL -1)
+        message(FATAL_ERROR "Make target does not use configure_cmake.sh: ${required_text}")
+    endif()
+endforeach()

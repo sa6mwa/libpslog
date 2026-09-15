@@ -711,6 +711,15 @@ if(PSLOG_BUILD_TESTS)
         LABELS "local;smoke"
         TIMEOUT 30
     )
+    add_test(NAME configure_cmake_test
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/configure_cmake_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(configure_cmake_test PROPERTIES
+        RUN_SERIAL TRUE
+        LABELS "local;smoke;toolchain"
+        TIMEOUT 60
+    )
     if(CMAKE_CURRENT_BINARY_DIR MATCHES "/build/host$")
         add_test(NAME rebaseline_compiler_fallback_test
             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/rebaseline_compiler_fallback_test.sh

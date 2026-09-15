@@ -118,7 +118,7 @@ See [gobencher/README.md](../gobencher/README.md) for the caveats and the elevat
 `liblogger` is benchmark-only. To enable it:
 
 ```sh
-cmake --preset host -DPSLOG_BENCHMARK_WITH_LIBLOGGER=ON
+./scripts/configure_cmake.sh --preset host -- -DPSLOG_BENCHMARK_WITH_LIBLOGGER=ON
 cmake --build --preset host
 ./build/host/pslog_bench 200000 liblogger_json liblogger_json_prod
 ```
@@ -142,7 +142,7 @@ the `jsonLiblogger` compare automatically.
 `Quill` is benchmark-only. To enable it:
 
 ```sh
-cmake --preset host -DPSLOG_BENCHMARK_WITH_QUILL=ON
+./scripts/configure_cmake.sh --preset host -- -DPSLOG_BENCHMARK_WITH_QUILL=ON
 cmake --build --preset host
 ```
 

@@ -151,9 +151,9 @@ RELEASE_TIMING_FILE := $(CURDIR)/build/release-timings.tsv
 help:
 	@printf '%s\n' \
 		'make build           Configure and build the debug preset.' \
-		'make deps-debug      Provision the pinned native Bootlin collection.' \
-		'make deps-release    Provision all pinned Linux release collections.' \
-		'make deps-cross      Provision the pinned non-host Linux collections.' \
+		'make deps-debug      Provision the pinned native Bootlin collection (normally automatic).' \
+		'make deps-release    Provision all pinned Linux release collections (normally automatic).' \
+		'make deps-cross      Provision the pinned non-host Linux collections (normally automatic).' \
 		'make build-debug     Alias for make build.' \
 		'make build-host      Configure and build the local development build.' \
 		'make build-release   Configure and build the full shipped release build matrix.' \
@@ -204,7 +204,7 @@ help:
 		'make clean-dist      Remove dist/ release artifacts.'
 
 build:
-	cmake --preset $(DEBUG_PRESET)
+	./scripts/configure_cmake.sh --preset $(DEBUG_PRESET)
 	cmake --build --preset $(DEBUG_PRESET)
 
 deps-debug:
@@ -221,17 +221,17 @@ deps-cross:
 build-debug: build
 
 build-host:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build --preset $(HOST_PRESET)
 
 build-release:
 	@set -e; for preset in $(RELEASE_BUILD_PRESETS); do \
-		cmake --preset "$$preset"; \
+		./scripts/configure_cmake.sh --preset "$$preset"; \
 		cmake --build --preset "$$preset"; \
 	done
 
 format:
-	cmake --preset $(DEBUG_PRESET)
+	./scripts/configure_cmake.sh --preset $(DEBUG_PRESET)
 	cmake --build --preset format
 
 clangd: build
@@ -263,13 +263,13 @@ test-all:
 	$(TIMED) perf-gate $(MAKE) perf-gate
 
 valgrind:
-	cmake --preset $(VALGRIND_PRESET)
+	./scripts/configure_cmake.sh --preset $(VALGRIND_PRESET)
 	cmake --build --preset $(VALGRIND_PRESET)
 	valgrind --leak-check=full --track-origins=yes --error-exitcode=1 \
 		./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
 
 coverage:
-	cmake --preset $(COVERAGE_PRESET)
+	./scripts/configure_cmake.sh --preset $(COVERAGE_PRESET)
 	cmake --build --preset $(COVERAGE_PRESET)
 	ctest --preset $(COVERAGE_PRESET) --output-on-failure
 	cmake --build --preset coverage-report
@@ -304,7 +304,7 @@ elevatorpitch: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS
 
 cross-build:
 	@set -e; for preset in $(CROSS_RELEASE_PRESETS); do \
-		cmake --preset "$$preset"; \
+		./scripts/configure_cmake.sh --preset "$$preset"; \
 		cmake --build --preset "$$preset"; \
 	done
 
@@ -316,7 +316,7 @@ cross-test: cross-build
 test-cross: cross-test
 
 package:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-clean-dist
 	cmake --build build/$(HOST_PRESET) --target package-archive
 	cmake --build build/$(HOST_PRESET) --target package-single-header
@@ -325,23 +325,23 @@ package:
 	cmake --build build/$(HOST_PRESET) --target package-checksums
 
 package-source:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-source
 
 package-source-smoke:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
 
 package-single-header:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-single-header
 
 package-checksums:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-checksums
 
 package-verify:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(package_archives_test|release_privacy_gate_test)$$' --output-on-failure
 	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
 	cmake --build build/$(HOST_PRESET) --target package-privacy-gate
@@ -349,14 +349,14 @@ package-verify:
 verify-release-archives: package-verify
 
 verify-release-privacy:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	./scripts/verify_release_privacy.sh --build-dir build/$(HOST_PRESET) --target-id x86_64-linux-gnu
 
 release-matrix:
 	./scripts/run_linux_release_matrix.sh
 
 finalize-slice: format clangd build-host
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(pslog_tests|pslog_single_header_tests|example_integration_test|public_symbol_visibility_test|darwin_linker_route_test)$$' --output-on-failure
 
 release-pipeline:
@@ -416,7 +416,7 @@ $(LUA_ROCKSPEC): $(LUA_ROCK_SOURCES)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_ROCKSPEC)" "git+file://$(CURDIR)"
 
 $(LUA_STAGED_LUA_DEPS): FORCE
-	cmake -S cmake/lua -B build/lua-runtime -DCMAKE_BUILD_TYPE=Release
+	./scripts/configure_cmake.sh --source cmake/lua --build build/lua-runtime --target host -- -DCMAKE_BUILD_TYPE=Release
 	cmake --build build/lua-runtime
 	cmake --install build/lua-runtime --prefix "$(CURDIR)/$(LUA_STAGED_ROOT)"
 	touch "$@"

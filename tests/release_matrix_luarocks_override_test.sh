@@ -15,6 +15,7 @@ cp "$repo_root/scripts/run_linux_release_matrix.sh" "$fake_repo/scripts/"
 printf '%s\n' '#!/bin/sh' 'label=$1; shift' 'exec "$@"' >"$fake_repo/scripts/run_timed.sh"
 printf '%s\n' '#!/bin/sh' 'printf "0.0.0\\n"' >"$fake_repo/lua/scripts/release_version.sh"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$fake_repo/scripts/verify_release_privacy.sh"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$fake_repo/scripts/configure_cmake.sh"
 printf '%s\n' '#!/bin/sh' \
   'if [ "$1" = discover ] && [ "$2" = arm64-apple-darwin ]; then printf "%s\n" target=arm64-apple-darwin status=missing note=partial-osxcross; exit 0; fi' \
   'exit 1' >"$fake_repo/scripts/cpkt-toolchains.sh"
@@ -38,6 +39,7 @@ printf '%s\n' '#!/bin/sh' \
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$fake_bin/custom-luarocks"
 chmod +x "$fake_repo/scripts/run_timed.sh" "$fake_repo/lua/scripts/release_version.sh" \
   "$fake_repo/scripts/verify_release_privacy.sh" "$fake_repo/scripts/cpkt-toolchains.sh" \
+  "$fake_repo/scripts/configure_cmake.sh" \
   "$fake_bin/env" "$fake_bin/dirname" "$fake_bin/make" "$fake_bin/custom-luarocks"
 
 mkdir -p "$fake_home/.local/cross/osxcross/bin"

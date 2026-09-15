@@ -29,7 +29,8 @@ make_fake_fuzzer() {
 
 printf '%s\n' '#!/usr/bin/env bash' 'printf "afl_fuzz=%s\\n" "$(dirname "$0")/../fake-afl-fuzz"' \
   >"$repo_root/scripts/cpkt-aflpp.sh"
-chmod +x "$repo_root/scripts/cpkt-aflpp.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$repo_root/scripts/configure_cmake.sh"
+chmod +x "$repo_root/scripts/cpkt-aflpp.sh" "$repo_root/scripts/configure_cmake.sh"
 
 make_fake_fuzzer 'touch "$output/default/crashes/id:000000,sig:06"'
 if main smoke 1; then

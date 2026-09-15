@@ -156,7 +156,7 @@ The main example is [examples/example.c](examples/example.c). It demonstrates:
 Build it in normal library mode:
 
 ```sh
-cmake --preset host
+./scripts/configure_cmake.sh --preset host
 cmake --build --preset host
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
@@ -186,7 +186,7 @@ when a static link is preferred.
 Build the same example in single-header mode:
 
 ```sh
-cmake --preset host
+./scripts/configure_cmake.sh --preset host
 cmake --build ../build/host --target package-single-header
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
@@ -305,7 +305,7 @@ Run `make help` for the full target list.
 Standard debug build:
 
 ```sh
-cmake --preset debug
+./scripts/configure_cmake.sh --preset debug
 cmake --build --preset debug
 ctest --preset debug
 ```
@@ -348,7 +348,7 @@ column -t -s $'\t' build/release-timings.tsv
 
 That script runs, for every shipped Linux target:
 
-- `cmake --preset ...`
+- `scripts/configure_cmake.sh --preset ...`
 - `cmake --build --preset ...`
 - `ctest --preset ...`
 - runtime package generation
@@ -362,7 +362,7 @@ and packages `arm64-apple-darwin`.
 
 Toolchain expectations:
 
-- Every Linux preset provisions a checksum-pinned Bootlin stable-2026.08-1 GCC collection through `scripts/cpkt-toolchains.sh`; plain Linux CMake configuration bootstraps the native collection automatically, and incompatible or stale host compiler configurations fail. On macOS, the local development presets leave compiler selection to the host, while the Darwin release preset uses its configured osxcross collection.
+- Every Linux configure path provisions a checksum-pinned Bootlin stable-2026.08-1 GCC collection through `scripts/cpkt-toolchains.sh`. User-facing Make targets and standalone benchmark, fuzz, and release-matrix scripts use `scripts/configure_cmake.sh`, which removes stale compiler state before configuring. On macOS, the local development presets leave compiler selection to the host, while the Darwin release preset uses its configured osxcross collection.
 - Every non-shipped native Linux executable pins the selected Bootlin ELF interpreter and a private DT_RPATH at link time, so CTest, Valgrind, examples, benchmarks, fuzzing, and generated local consumers run directly with the selected runtime. Native memory checking still uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection. Cross-target tests continue to use QEMU with their matching sysroot.
 - `clang-format` and `clangd` are host development tools only. `make clangd` checks the native public C consumer with `build/debug/compile_commands.json`, including its public-header surface. Public declarations use Doxygen comments so hover documentation remains useful in clangd. clangd is not a compiler, target-ABI verifier, package check, or release dependency; cross builds, packages, and releases do not invoke it.
 - Release privacy verification inspects every ELF payload by magic, including extensionless files and nested archives. It rejects private interpreters, bundled libc loaders, absolute dependency paths, and every non-relative runtime search-path entry; missing inspection tools fail the gate. Local runtime flags never enter installed SDK metadata.
@@ -373,7 +373,7 @@ Toolchain expectations:
 Single-target examples:
 
 ```sh
-cmake --preset aarch64-linux-gnu-release
+./scripts/configure_cmake.sh --preset aarch64-linux-gnu-release
 cmake --build --preset aarch64-linux-gnu-release
 ctest --preset aarch64-linux-gnu-release
 

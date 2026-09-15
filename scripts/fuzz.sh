@@ -12,7 +12,7 @@ main() {
   [[ "$seconds" -gt 0 ]] || { printf 'fuzz duration must be positive\n' >&2; return 2; }
 
   cd "$repo_root"
-  cmake --preset fuzz
+  "$repo_root/scripts/configure_cmake.sh" --preset fuzz
   cmake --build --preset fuzz
   description=$(./scripts/cpkt-aflpp.sh discover)
   afl_fuzz=$(sed -n 's/^afl_fuzz=//p' <<<"$description" | tail -n 1)
