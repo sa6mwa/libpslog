@@ -99,4 +99,25 @@ if printf '%s\n' "$fuzz_output" | grep -F 'discarding stale compiler state' >/de
     exit 1
 fi
 
+direct_repo="$work_root/direct-repo"
+direct_args="$direct_repo/cmake-arguments"
+direct_bin="$direct_repo/bin"
+mkdir -p "$direct_repo/scripts" "$direct_repo/cmake/toolchains" "$direct_bin"
+cp "$repo_root/scripts/configure_cmake.sh" "$direct_repo/scripts/"
+printf '%s\n' '#!/usr/bin/env bash' \
+    'case "$1" in ensure) exit 0 ;; discover) printf "cc=/toolchains/aarch64-gcc\\n" ;; esac' \
+    > "$direct_repo/scripts/cpkt-toolchains.sh"
+printf '%s\n' '#!/usr/bin/env bash' \
+    "printf '%s\\n' \"\$@\" > '$direct_args'" \
+    > "$direct_bin/cmake"
+chmod +x "$direct_repo/scripts/"*.sh "$direct_bin/cmake"
+PATH="$direct_bin:$PATH" "$direct_repo/scripts/configure_cmake.sh" \
+    --source . --build build/direct-aarch64 --target aarch64-linux-gnu -- \
+    -DCMAKE_TOOLCHAIN_FILE=/wrong-toolchain
+expected_toolchain="-DCMAKE_TOOLCHAIN_FILE=$direct_repo/cmake/toolchains/linux-aarch64-gnu.cmake"
+[[ "$(tail -n 1 "$direct_args")" == "$expected_toolchain" ]] || {
+    printf 'direct configuration did not select the requested aarch64 toolchain\n' >&2
+    exit 1
+}
+
 printf 'configure_cmake stale-cache recovery tests passed.\n'
