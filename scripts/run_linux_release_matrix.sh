@@ -23,7 +23,7 @@ run_target() {
     archive_target="$2"
 
     printf '\n== %s ==\n' "$preset"
-    "$repo_root/scripts/run_timed.sh" "${preset}:configure" cmake --preset "$preset"
+    "$repo_root/scripts/run_timed.sh" "${preset}:configure" "$repo_root/scripts/configure_cmake.sh" --preset "$preset"
     "$repo_root/scripts/run_timed.sh" "${preset}:build" cmake --build --preset "$preset"
     "$repo_root/scripts/run_timed.sh" "${preset}:test" ctest --preset "$preset"
     "$repo_root/scripts/run_timed.sh" "${preset}:package" cmake --build "build/$preset" --target "$archive_target"
@@ -34,7 +34,7 @@ run_build_only_target() {
     archive_target="$2"
 
     printf '\n== %s ==\n' "$preset"
-    "$repo_root/scripts/run_timed.sh" "${preset}:configure" cmake --preset "$preset"
+    "$repo_root/scripts/run_timed.sh" "${preset}:configure" "$repo_root/scripts/configure_cmake.sh" --preset "$preset"
     "$repo_root/scripts/run_timed.sh" "${preset}:build" cmake --build --preset "$preset"
     "$repo_root/scripts/run_timed.sh" "${preset}:package" cmake --build "build/$preset" --target "$archive_target"
 }
@@ -57,7 +57,7 @@ esac
 
 cd "$repo_root"
 
-"$repo_root/scripts/run_timed.sh" release-matrix:host-configure cmake --preset host
+"$repo_root/scripts/run_timed.sh" release-matrix:host-configure "$repo_root/scripts/configure_cmake.sh" --preset host
 "$repo_root/scripts/run_timed.sh" release-matrix:clean-dist cmake --build build/host --target package-clean-dist
 
 run_target x86_64-linux-gnu-release package-archive

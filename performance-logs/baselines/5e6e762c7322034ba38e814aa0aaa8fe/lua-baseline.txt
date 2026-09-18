@@ -9,7 +9,7 @@
 # command: cd gobencher && GOCACHE="$(mktemp -d)" go test ./benchmark -run '^$' -bench 'Benchmark(ProductionCompare|FixedCompare|LuaTableForm)' -benchmem -benchtime=200ms -count=1
 # cmake_preset: host
 # optional_deps: liblogger off, quill off
-# host: local
+# host: nodename-md5 5e6e762c7322034ba38e814aa0aaa8fe
 # compiler: GNU
 # artifact_role: current checked-in Lua comparison baseline
 # iterations: Go benchmark selected

@@ -23,15 +23,39 @@ else()
     endif()
     if(PSLOG_GIT_EXECUTABLE AND _pslog_source_has_git_metadata)
         execute_process(
-            COMMAND "${PSLOG_GIT_EXECUTABLE}" -C "${_pslog_version_source_dir}" describe --tags --exact-match HEAD
+            COMMAND "${PSLOG_GIT_EXECUTABLE}" -C "${_pslog_version_source_dir}" tag --points-at HEAD
             RESULT_VARIABLE _pslog_git_describe_result
             OUTPUT_VARIABLE _pslog_git_describe_output
             ERROR_QUIET
             OUTPUT_STRIP_TRAILING_WHITESPACE
         )
-        if(_pslog_git_describe_result EQUAL 0
-           AND _pslog_git_describe_output MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?)$")
-            set(_pslog_resolved_version "${CMAKE_MATCH_1}")
+        if(_pslog_git_describe_result EQUAL 0)
+            string(REPLACE "\n" ";" _pslog_git_tags "${_pslog_git_describe_output}")
+            set(_pslog_exact_version_tags "")
+            foreach(_pslog_git_tag IN LISTS _pslog_git_tags)
+                if(_pslog_git_tag MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?)$")
+                    execute_process(
+                        COMMAND "${PSLOG_GIT_EXECUTABLE}" -C "${_pslog_version_source_dir}" cat-file -t "refs/tags/${_pslog_git_tag}"
+                        RESULT_VARIABLE _pslog_tag_type_result
+                        OUTPUT_VARIABLE _pslog_tag_type
+                        ERROR_QUIET
+                        OUTPUT_STRIP_TRAILING_WHITESPACE
+                    )
+                    if(NOT _pslog_tag_type_result EQUAL 0 OR NOT _pslog_tag_type STREQUAL "commit")
+                        message(FATAL_ERROR
+                            "release tag '${_pslog_git_tag}' must be a lightweight tag that resolves directly to a commit")
+                    endif()
+                    list(APPEND _pslog_exact_version_tags "${_pslog_git_tag}")
+                endif()
+            endforeach()
+            list(LENGTH _pslog_exact_version_tags _pslog_exact_version_tag_count)
+            if(_pslog_exact_version_tag_count GREATER 1)
+                message(FATAL_ERROR
+                    "multiple exact lightweight release tags point at HEAD: ${_pslog_exact_version_tags}")
+            elseif(_pslog_exact_version_tag_count EQUAL 1)
+                list(GET _pslog_exact_version_tags 0 _pslog_exact_version_tag)
+                string(REGEX REPLACE "^v" "" _pslog_resolved_version "${_pslog_exact_version_tag}")
+            endif()
         endif()
     endif()
     if(NOT _pslog_git_describe_result EQUAL 0

@@ -10,7 +10,7 @@
 # command: ./build/host/pslog_bench 200000 all (inferred from rows)
 # cmake_preset: host (inferred from benchmark workflow)
 # optional_deps: liblogger rows present where shown; quill rows absent
-# host: not recorded
+# host: nodename-md5 5e6e762c7322034ba38e814aa0aaa8fe
 # compiler: not recorded
 # artifact_role: current checked-in local comparison baseline
 # source_file: pure-c-final-taskset-c0.txt

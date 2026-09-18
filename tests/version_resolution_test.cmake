@@ -101,6 +101,19 @@ if(NOT tagged_probe_contents STREQUAL "1.2.3|1.2.3|1|2|3")
         "expected exact v-tag to resolve to 1.2.3, got '${tagged_probe_contents}'")
 endif()
 
+execute_process(
+    COMMAND bash "${PSLOG_ROOT}/lua/scripts/release_version.sh"
+    WORKING_DIRECTORY "${repo_dir}"
+    RESULT_VARIABLE tagged_make_probe_result
+    OUTPUT_VARIABLE tagged_make_probe_output
+    ERROR_VARIABLE tagged_make_probe_error
+)
+string(STRIP "${tagged_make_probe_output}" tagged_make_probe_output)
+if(NOT tagged_make_probe_result EQUAL 0 OR NOT tagged_make_probe_output STREQUAL "1.2.3")
+    message(FATAL_ERROR
+        "expected Make version resolver to select lightweight v1.2.3, got '${tagged_make_probe_output}': ${tagged_make_probe_error}")
+endif()
+
 set(build_metadata_output "${test_root}/build-metadata.txt")
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
@@ -171,6 +184,51 @@ if(NOT git_second_commit_result EQUAL 0)
 endif()
 
 execute_process(
+    COMMAND "${PSLOG_GIT_BIN}" tag -a v2.3.4 -m "annotated version test"
+    WORKING_DIRECTORY "${repo_dir}"
+    RESULT_VARIABLE annotated_tag_result
+    OUTPUT_QUIET
+    ERROR_QUIET
+)
+if(NOT annotated_tag_result EQUAL 0)
+    message(FATAL_ERROR "failed to create annotated version test tag")
+endif()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -DPSLOG_ROOT=${PSLOG_ROOT}
+        -DPSLOG_VERSION_SOURCE_DIR=${repo_dir}
+        -DPSLOG_VERSION_PROBE_OUTPUT=${test_root}/annotated.txt
+        -P ${PSLOG_ROOT}/tests/version_resolution_probe.cmake
+    RESULT_VARIABLE annotated_probe_result
+    ERROR_VARIABLE annotated_probe_error
+)
+if(annotated_probe_result EQUAL 0 OR NOT annotated_probe_error MATCHES "lightweight")
+    message(FATAL_ERROR "annotated release tags must be rejected: ${annotated_probe_error}")
+endif()
+
+execute_process(
+    COMMAND bash "${PSLOG_ROOT}/lua/scripts/release_version.sh"
+    WORKING_DIRECTORY "${repo_dir}"
+    RESULT_VARIABLE annotated_make_probe_result
+    ERROR_VARIABLE annotated_make_probe_error
+)
+if(annotated_make_probe_result EQUAL 0 OR NOT annotated_make_probe_error MATCHES "lightweight")
+    message(FATAL_ERROR "Make resolver accepted an annotated release tag: ${annotated_make_probe_error}")
+endif()
+
+execute_process(
+    COMMAND "${PSLOG_GIT_BIN}" tag -d v2.3.4
+    WORKING_DIRECTORY "${repo_dir}"
+    RESULT_VARIABLE delete_annotated_tag_result
+    OUTPUT_QUIET
+    ERROR_QUIET
+)
+if(NOT delete_annotated_tag_result EQUAL 0)
+    message(FATAL_ERROR "failed to remove annotated version test tag")
+endif()
+
+execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -DPSLOG_ROOT=${PSLOG_ROOT}
         -DPSLOG_VERSION_SOURCE_DIR=${repo_dir}
@@ -210,4 +268,17 @@ string(STRIP "${source_version_probe_contents}" source_version_probe_contents)
 if(NOT source_version_probe_contents STREQUAL "4.5.6|4.5.6|4|5|6")
     message(FATAL_ERROR
         "expected non-git VERSION file to resolve to 4.5.6, got '${source_version_probe_contents}'")
+endif()
+
+execute_process(
+    COMMAND bash "${PSLOG_ROOT}/lua/scripts/release_version.sh"
+    WORKING_DIRECTORY "${source_dir}"
+    RESULT_VARIABLE source_make_probe_result
+    OUTPUT_VARIABLE source_make_probe_output
+    ERROR_VARIABLE source_make_probe_error
+)
+string(STRIP "${source_make_probe_output}" source_make_probe_output)
+if(NOT source_make_probe_result EQUAL 0 OR NOT source_make_probe_output STREQUAL "4.5.6")
+    message(FATAL_ERROR
+        "expected non-git Make resolver to use VERSION, got '${source_make_probe_output}': ${source_make_probe_error}")
 endif()

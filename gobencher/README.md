@@ -34,7 +34,7 @@ The cgo bridge links against the repo-local installed SDK at
 `../build/lua-sdk/include`.
 The embedded-Lua compare path loads the shipped rock from `../build/luarocks`.
 Do not invoke raw Go commands until one of those root targets has prepared the
-selected Bootlin compiler and generated benchmark inputs.
+selected compiler and generated benchmark inputs.
 
 ## Useful Commands
 
@@ -46,12 +46,14 @@ make -C .. elevatorpitch ELEVATORPITCH_ARGS='-duration=3s -interval=100ms -limit
 make -C .. elevatorpitch ELEVATORPITCH_ARGS='-include-quill'
 ```
 
-From the repository root, `./bench/run_rebaseline.sh` runs the pure C benchmark matrix first and then this Go-vs-C compare suite.
+From the repository root, `make bench-freeze-baseline` intentionally captures
+the current host’s C and Lua performance baselines, including this compare suite.
 
-If you want a fail-fast gate instead of an observational rebaseline, run:
+To compare against the automatically selected host baseline, run from the
+repository root:
 
 ```sh
-./bench/run_perf_gate.sh
+make perf-gate
 ```
 
 That script uses a fresh temporary `GOCACHE` so stale cgo objects do not make the C compare path look broken or artificially slow after header or ABI changes.

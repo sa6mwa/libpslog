@@ -7,11 +7,12 @@ It is intentionally direct: each section creates and uses the public API without
 Build it in normal library mode:
 
 ```sh
-cmake --preset host
+./scripts/configure_cmake.sh --preset host
 cmake --build --preset host
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
-  -o example example.c ../build/host/libpslog.a -pthread
+  -o example example.c ../build/host/libpslog.a -pthread \
+  $(sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' ../build/host/CMakeCache.txt)
 ./example
 ```
 
@@ -23,12 +24,12 @@ target.
 Build it in single-header mode:
 
 ```sh
-cmake --preset host
+./scripts/configure_cmake.sh --preset host
 cmake --build ../build/host --target package-single-header
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
-  -I../build/host/generated/include \
-  -o example example.c -pthread
+  -I../build/host/generated/include -o example example.c -pthread \
+  $(sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' ../build/host/CMakeCache.txt)
 ./example
 ```
 

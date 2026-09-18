@@ -52,7 +52,9 @@ extern "C" {
  * `PSLOG_MODE_JSON` emits one structured JSON object per line.
  */
 typedef enum pslog_mode {
+  /** Human-oriented, line-based output. */
   PSLOG_MODE_CONSOLE = 0,
+  /** One structured JSON object per line. */
   PSLOG_MODE_JSON = 1
 } pslog_mode;
 
@@ -66,14 +68,23 @@ typedef enum pslog_mode {
  * is not intended to be emitted as a normal event.
  */
 typedef enum pslog_level {
+  /** Most verbose diagnostic level. */
   PSLOG_LEVEL_TRACE = -1,
+  /** Diagnostic level enabled by the default configuration. */
   PSLOG_LEVEL_DEBUG = 0,
+  /** Normal operational event. */
   PSLOG_LEVEL_INFO = 1,
+  /** Recoverable or noteworthy condition. */
   PSLOG_LEVEL_WARN = 2,
+  /** Error condition. */
   PSLOG_LEVEL_ERROR = 3,
+  /** Error event followed by process termination. */
   PSLOG_LEVEL_FATAL = 4,
+  /** Error event followed by process abort. */
   PSLOG_LEVEL_PANIC = 5,
+  /** Event deliberately emitted without a severity label. */
   PSLOG_LEVEL_NOLEVEL = 6,
+  /** Filtering sentinel that suppresses every ordinary event. */
   PSLOG_LEVEL_DISABLED = 127
 } pslog_level;
 
@@ -84,8 +95,11 @@ typedef enum pslog_level {
  * it is attached to a terminal.
  */
 typedef enum pslog_color_mode {
+  /** Emit color only when the output reports a terminal. */
   PSLOG_COLOR_AUTO = 0,
+  /** Never emit ANSI color sequences. */
   PSLOG_COLOR_NEVER = 1,
+  /** Always emit ANSI color sequences. */
   PSLOG_COLOR_ALWAYS = 2
 } pslog_color_mode;
 
@@ -96,7 +110,9 @@ typedef enum pslog_color_mode {
  * choose between string preservation or `null`.
  */
 typedef enum pslog_non_finite_float_policy {
+  /** Preserve NaN and infinity as strings. */
   PSLOG_NON_FINITE_FLOAT_AS_STRING = 0,
+  /** Encode NaN and infinity as JSON null values. */
   PSLOG_NON_FINITE_FLOAT_AS_NULL = 1
 } pslog_non_finite_float_policy;
 
@@ -107,16 +123,27 @@ typedef enum pslog_non_finite_float_policy {
  * quoted, colorized, escaped, or rendered numerically.
  */
 typedef enum pslog_field_type {
+  /** Null value. */
   PSLOG_FIELD_NULL = 0,
+  /** String value. */
   PSLOG_FIELD_STRING = 1,
+  /** Signed integer value. */
   PSLOG_FIELD_SIGNED = 2,
+  /** Unsigned integer value. */
   PSLOG_FIELD_UNSIGNED = 3,
+  /** Floating-point value. */
   PSLOG_FIELD_DOUBLE = 4,
+  /** Boolean value. */
   PSLOG_FIELD_BOOL = 5,
+  /** Pointer value. */
   PSLOG_FIELD_POINTER = 6,
+  /** Borrowed bytes encoded as hexadecimal. */
   PSLOG_FIELD_BYTES = 7,
+  /** Wall-clock timestamp. */
   PSLOG_FIELD_TIME = 8,
+  /** Human-readable duration. */
   PSLOG_FIELD_DURATION = 9,
+  /** errno-style integer rendered as error text. */
   PSLOG_FIELD_ERRNO = 10
 } pslog_field_type;
 
@@ -124,8 +151,8 @@ typedef enum pslog_field_type {
  * Borrowed byte slice used by `PSLOG_FIELD_BYTES`.
  *
  * The data is not copied on field construction. The pointed-to memory must stay
- * valid until the logging call that consumes the field has returned, or until a
- * derived logger created with `with()` has been destroyed.
+ * valid until the logging call that consumes the field has returned. Derived
+ * loggers created with `with()` copy their attached fields into owned storage.
  */
 typedef struct pslog_bytes {
   /** Start of the borrowed byte slice. */
@@ -199,7 +226,8 @@ typedef struct pslog_duration_value {
  * functions rather than populating the struct manually. The cached metadata
  * fields (`key_len`, `value_len`, `trusted_key`, `trusted_value`,
  * `console_simple_value`) exist so callers can prepare fields once and reuse
- * them efficiently across many log calls.
+ * them efficiently across many log calls. Pointer payloads are borrowed for a
+ * direct logging call; `with()` copies them into the returned logger.
  */
 typedef struct pslog_field {
   /** Field name. Keys are rendered exactly as provided. */
@@ -507,9 +535,10 @@ typedef struct pslog_config {
    * are also recognized as explicit built-in layouts.
    */
   const char *time_format;
-  /** ANSI palette used when color is enabled. */
+  /** ANSI palette used when color is enabled; it remains caller-owned. */
   const pslog_palette *palette;
-  /** Output sink that receives encoded bytes. */
+  /** Output callbacks and userdata that receive encoded bytes; they remain
+   * caller-owned. */
   pslog_output output;
 } pslog_config;
 
@@ -571,6 +600,8 @@ struct pslog_logger {
    *
    * Passing `NULL` with `count == 0` returns a structural clone of the
    * receiver without adding fields.
+   *
+   * Returns NULL when allocation fails.
    */
   pslog_logger *(*with)(pslog_logger *log, const pslog_field *fields,
                         size_t count);
@@ -599,6 +630,8 @@ struct pslog_logger {
    *
    * This is the C equivalent of taking a configured sub-logger for a
    * subsystem.
+   *
+   * Returns NULL when allocation fails.
    */
   pslog_logger *(*with_level)(pslog_logger *log, pslog_level level);
 
@@ -607,6 +640,8 @@ struct pslog_logger {
    *
    * In JSON mode this adds a `loglevel` field. In console mode it appends the
    * same information as a structured key/value pair.
+   *
+   * Returns NULL when allocation fails.
    */
   pslog_logger *(*with_level_field)(pslog_logger *log);
 
@@ -688,15 +723,18 @@ struct pslog_logger {
 /**
  * Fills `config` with the library defaults.
  *
- * This is the required starting point for building a `pslog_config`.
+ * This is the required starting point for building a `pslog_config`. Passing
+ * NULL is a no-op.
  */
 PSLOG_API void pslog_default_config(pslog_config *config);
 
 /**
  * Creates a new logger from `config`.
  *
- * Returns NULL when allocation fails or when the configured output cannot be
- * initialized.
+ * Passing NULL uses the defaults from `pslog_default_config()`. The config is
+ * read during construction; its palette, output callbacks, and output userdata
+ * remain borrowed and must outlive the logger. Returns NULL when allocation
+ * fails or the configured line-buffer capacity is invalid.
  */
 PSLOG_API pslog_logger *pslog_new(const pslog_config *config);
 
@@ -706,6 +744,12 @@ PSLOG_API pslog_logger *pslog_new(const pslog_config *config);
  * `prefix` may be NULL to use the default `LOG_` prefix. The seed config is
  * copied first, then environment variables override selected members. This is
  * the C equivalent of "logger from env" setup in the Go implementation.
+ * Passing NULL for `config` starts from library defaults. Its palette, output
+ * callbacks, and output userdata follow the same borrowed-lifetime rule as
+ * `pslog_new()`.
+ *
+ * Returns NULL for the same allocation and configuration failures as
+ * `pslog_new()`.
  */
 PSLOG_API pslog_logger *pslog_new_from_env(const char *prefix,
                                            const pslog_config *config);
@@ -713,18 +757,22 @@ PSLOG_API pslog_logger *pslog_new_from_env(const char *prefix,
 /**
  * Builds a `pslog_output` from a `FILE *`.
  *
- * When `close_on_destroy` is non-zero, destroying the logger also closes `fp`.
- * When zero, `fp` remains owned by the caller.
+ * `fp` must remain usable until ownership transfers to a logger or the output
+ * is destroyed. When `close_on_destroy` is non-zero, destroying the logger
+ * also closes `fp`; otherwise it remains caller-owned.
  */
 PSLOG_API pslog_output pslog_output_from_fp(FILE *fp, int close_on_destroy);
 
 /**
  * Initializes `output` to append to a file path.
  *
- * `mode` uses the `fopen()` style append/write strings supported by libpslog's
- * file backend.
+ * `mode` uses the file-backend append/write modes; NULL selects append mode.
+ * `output` and `path` must be non-NULL. On success, `output` owns the opened
+ * file and can be transferred to a logger or released with
+ * `pslog_output_destroy()`.
  *
- * Returns `0` on success.
+ * Returns `0` on success, an errno-style code for open failures, or `-1` for
+ * invalid input or allocation failure.
  */
 PSLOG_API int pslog_output_init_file(pslog_output *output, const char *path,
                                      const char *mode);
@@ -733,7 +781,8 @@ PSLOG_API int pslog_output_init_file(pslog_output *output, const char *path,
  * Destroys a standalone output object previously initialized by libpslog.
  *
  * This is mainly useful when an output is constructed before logger creation
- * and later discarded without being transferred into a logger.
+ * and later discarded without being transferred into a logger. Passing NULL is
+ * a no-op. The object is cleared after an owned output is closed.
  */
 PSLOG_API void pslog_output_destroy(pslog_output *output);
 
@@ -753,6 +802,8 @@ PSLOG_API void pslog_observed_output_init(pslog_observed_output *observed,
 
 /**
  * Returns cumulative failure statistics from an observed output wrapper.
+ *
+ * Passing NULL returns zero counters.
  */
 PSLOG_API pslog_observed_output_stats
 pslog_observed_output_stats_get(const pslog_observed_output *observed);
@@ -768,14 +819,18 @@ PSLOG_API int pslog_close(pslog_logger *log);
 
 /**
  * Returns the canonical lowercase string for `level`.
+ *
+ * Values outside `pslog_level` return the fallback string `"info"`.
  */
 PSLOG_API const char *pslog_level_string(pslog_level level);
 
 /**
  * Parses a level name such as `"debug"` or `"warn"`.
  *
- * Leading and trailing ASCII whitespace is ignored. Returns non-zero on
- * success.
+ * Matching is case-insensitive and leading and trailing ASCII whitespace is
+ * ignored. `"warning"` aliases `"warn"`; `"no"` and `"none"` alias
+ * `"nolevel"`; `"off"` aliases `"disabled"`. Returns non-zero on success
+ * and leaves `level` unchanged on failure. NULL input or output pointers fail.
  */
 PSLOG_API int pslog_parse_level(const char *text, pslog_level *level);
 
@@ -784,7 +839,8 @@ PSLOG_API int pslog_parse_level(const char *text, pslog_level *level);
  *
  * Trusted strings may skip repeated validation and escaping work on the hot
  * path. Use this only when you want to explicitly reason about trust decisions;
- * most callers should just use `pslog_str()` or `pslog_trusted_str()`.
+ * most callers should just use `pslog_str()` or `pslog_trusted_str()`. NULL is
+ * treated as the empty trusted string.
  */
 PSLOG_API int pslog_string_is_trusted(const char *text);
 
@@ -810,7 +866,8 @@ PSLOG_API size_t pslog_palette_count(void);
 /**
  * Returns the canonical name of the palette at `index`.
  *
- * The returned pointer remains valid for the lifetime of the process.
+ * The returned pointer remains valid for the lifetime of the process. Returns
+ * NULL when `index` is outside `pslog_palette_count()`.
  */
 PSLOG_API const char *pslog_palette_name(size_t index);
 
@@ -821,7 +878,8 @@ PSLOG_API pslog_field pslog_null(const char *key);
  * Builds a string field.
  *
  * libpslog automatically caches key/value lengths and trust metadata so the
- * field can be reused efficiently.
+ * field can be reused efficiently. Both strings are borrowed until a direct
+ * logging call returns; `with()` makes owned copies for a child logger.
  */
 PSLOG_API pslog_field pslog_str(const char *key, const char *value);
 /**
@@ -839,7 +897,8 @@ PSLOG_API pslog_field pslog_errno(const char *key, int err);
  * Builds a string field that explicitly opts into the trusted-string fast path.
  *
  * Trust is applied only when the provided key and value satisfy the trusted
- * string rules. Unsafe inputs still fall back to normal escaping.
+ * string rules. Unsafe inputs still fall back to normal escaping. Both strings
+ * follow the borrowed-lifetime rule of `pslog_str()`.
  */
 PSLOG_API pslog_field pslog_trusted_str(const char *key, const char *value);
 
@@ -1005,7 +1064,8 @@ PSLOG_API pslog_logger *pslog_withf(pslog_logger *log, const char *kvfmt, ...);
 /**
  * Derives a child logger with a different minimum enabled level.
  *
- * This does not mutate the original logger. Returns NULL when `log` is NULL.
+ * This does not mutate the original logger. Returns NULL when `log` is NULL or
+ * allocation fails.
  */
 PSLOG_API pslog_logger *pslog_with_level(pslog_logger *log, pslog_level level);
 
@@ -1013,7 +1073,7 @@ PSLOG_API pslog_logger *pslog_with_level(pslog_logger *log, pslog_level level);
  * Derives a child logger that adds the effective level as a static field.
  *
  * This is useful when downstream consumers want the level duplicated into the
- * structured field set. Returns NULL when `log` is NULL.
+ * structured field set. Returns NULL when `log` is NULL or allocation fails.
  */
 PSLOG_API pslog_logger *pslog_with_level_field(pslog_logger *log);
 

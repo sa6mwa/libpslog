@@ -34,9 +34,6 @@ set(PSLOG_BOOTLIN_C_COMPILER_OVERRIDE "${afl_cc}")
 set(PSLOG_BOOTLIN_CXX_COMPILER_OVERRIDE "${afl_cxx}")
 include("${CMAKE_CURRENT_LIST_DIR}/pslog_bootlin.cmake")
 pslog_configure_bootlin_toolchain("x86_64-linux-gnu")
-set(PSLOG_TEST_EXECUTOR
-    "${CMAKE_CURRENT_LIST_DIR}/../../scripts/run_sysroot_binary.sh;--sysroot;${CMAKE_SYSROOT}"
-    CACHE STRING "Bootlin sysroot launcher for native AFL++ test executables" FORCE)
 set(PSLOG_TARGET_ARCH x86_64 CACHE STRING "" FORCE)
 set(PSLOG_TARGET_OS linux CACHE STRING "" FORCE)
 set(PSLOG_TARGET_LIBC gnu CACHE STRING "" FORCE)

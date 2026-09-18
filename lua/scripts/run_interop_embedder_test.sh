@@ -11,12 +11,12 @@ out_dir="${repo_root}/build/lua-interop"
 test_bin="${out_dir}/pslog_lua_interop_tests"
 installed_consumer_src="${out_dir}/installed_rock_consumer.c"
 installed_consumer_bin="${out_dir}/installed_rock_consumer"
-if [ -n "${CC:-}" ]; then
+if [ "$(uname -s)" = Darwin ] && [ -n "${CC:-}" ]; then
     cc_bin="${CC}"
 else
     cache_file="${build_dir}/CMakeCache.txt"
     if [ ! -f "${cache_file}" ]; then
-        printf 'lua interop embedder test: missing configured Bootlin compiler cache: %s\n' "${cache_file}" >&2
+        printf 'lua interop embedder test: missing configured compiler cache: %s\n' "${cache_file}" >&2
         exit 1
     fi
     cc_bin=$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' "${cache_file}" | tail -n 1)
@@ -41,34 +41,6 @@ for candidate in "${sdk_lib_dir}/libpslog.so" "${sdk_lib_dir}/libpslog.dylib"; d
     fi
 done
 
-run_linked_binary() {
-    if [ -f "${cache_file}" ] && sed -n 's/^CMAKE_SYSROOT:[^=]*=//p' "${cache_file}" | grep -q .; then
-        "${repo_root}/scripts/run_sysroot_binary.sh" \
-            --build-dir "${build_dir}" \
-            --library-path "${sdk_lib_dir}" \
-            "$@"
-    else
-        LD_LIBRARY_PATH="${sdk_lib_dir}:${LD_LIBRARY_PATH:-}" \
-        DYLD_LIBRARY_PATH="${sdk_lib_dir}:${DYLD_LIBRARY_PATH:-}" \
-            "$@"
-    fi
-}
-
-run_installed_consumer() {
-    installed_core_dir=$1
-    if [ -f "${cache_file}" ] && sed -n 's/^CMAKE_SYSROOT:[^=]*=//p' "${cache_file}" | grep -q .; then
-        "${repo_root}/scripts/run_sysroot_binary.sh" \
-            --build-dir "${build_dir}" \
-            --library-path "${sdk_lib_dir}" \
-            --library-path "${installed_core_dir}" \
-            "${installed_consumer_bin}"
-    else
-        LD_LIBRARY_PATH="${sdk_lib_dir}:${installed_core_dir}:${LD_LIBRARY_PATH:-}" \
-        DYLD_LIBRARY_PATH="${sdk_lib_dir}:${installed_core_dir}:${DYLD_LIBRARY_PATH:-}" \
-            "${installed_consumer_bin}"
-    fi
-}
-
 mkdir -p "${out_dir}"
 
 if [ ! -f "${lua_include_dir}/lua.h" ] || [ ! -f "${lua_lib_dir}/liblua.a" ]; then
@@ -82,13 +54,25 @@ fi
 case "$(uname -s)" in
     Darwin)
         lua_dynamic_loader_libs=""
+        private_rpath="-Wl,-rpath,"
         ;;
     *)
         lua_dynamic_loader_libs="-ldl"
+        private_rpath="-Wl,--disable-new-dtags,-rpath,"
         ;;
 esac
 lua_cflags="-I${lua_include_dir}"
 lua_libs="-L${lua_lib_dir} -llua -lm ${lua_dynamic_loader_libs}"
+elf_linker_flags=
+if [ "$(uname -s)" != Darwin ]; then
+    elf_linker_flags=$(sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' "${cache_file}" | tail -n 1)
+    host_compiler_override=$(sed -n 's/^PSLOG_ALLOW_HOST_COMPILER:[^=]*=//p' "${cache_file}" | tail -n 1)
+    case "${host_compiler_override}" in 1|ON|TRUE|YES) ;; *) host_compiler_override=OFF ;; esac
+    if [ -z "${elf_linker_flags}" ] && [ "${host_compiler_override}" != ON ]; then
+        printf 'lua interop embedder test: missing Bootlin ELF runtime flags in %s\n' "${cache_file}" >&2
+        exit 1
+    fi
+fi
 
 "${cc_bin}" -std=c99 -Wall -Wextra -Werror ${cflags} \
     -D_POSIX_C_SOURCE=200809L \
@@ -98,10 +82,11 @@ lua_libs="-L${lua_lib_dir} -llua -lm ${lua_dynamic_loader_libs}"
     ${lua_cflags} \
     "${repo_root}/tests/lua_interop_embedder_test.c" \
     "${repo_root}/lua/src/pslog_lua.c" \
-    -L"${sdk_lib_dir}" -lpslog ${lua_libs} -pthread ${ldflags} \
+    -L"${sdk_lib_dir}" -lpslog ${lua_libs} -pthread ${ldflags} ${elf_linker_flags} \
+    "${private_rpath}${sdk_lib_dir}" \
     -o "${test_bin}"
 
-run_linked_binary "${test_bin}"
+"${test_bin}"
 
 installed_header=$(find "${rock_tree}/share/lua" -name pslog_lua.h -type f | head -n 1)
 if [ -z "${installed_header}" ]; then
@@ -124,8 +109,9 @@ installed_consumer_src="${repo_root}/tests/lua_interop_installed_consumer.c"
     ${lua_cflags} \
     "${installed_consumer_src}" \
     "${installed_core}" -L"${sdk_lib_dir}" -lpslog ${lua_libs} -pthread ${ldflags} \
-    -Wl,-rpath,"${sdk_lib_dir}" \
-    -Wl,-rpath,"$(dirname "${installed_core}")" \
+    ${elf_linker_flags} \
+    "${private_rpath}${sdk_lib_dir}" \
+    "${private_rpath}$(dirname "${installed_core}")" \
     -o "${installed_consumer_bin}"
 
-run_installed_consumer "$(dirname "${installed_core}")"
+"${installed_consumer_bin}"

@@ -25,7 +25,7 @@ CROSS_RELEASE_PRESETS := \
 LUA_RELEASE_VERSION := $(shell ./lua/scripts/release_version.sh)
 LUA_DIST_DIR := $(CURDIR)/dist
 LUA_RELEASE_ROCKSPEC := $(LUA_DIST_DIR)/lua-pslog-$(LUA_RELEASE_VERSION)-1.rockspec
-LUA_RELEASE_PACK_DIR := $(LUA_DIST_DIR)/.lua-pack
+LUA_RELEASE_PACK_DIR := $(CURDIR)/build/lua-release-pack
 LUA_RELEASE_STAGE_NAME := lua-pslog-$(LUA_RELEASE_VERSION)
 LUA_RELEASE_STAGE_DIR := $(LUA_RELEASE_PACK_DIR)/$(LUA_RELEASE_STAGE_NAME)
 LUA_RELEASE_MANIFEST := lua/RELEASE_MANIFEST.in
@@ -54,23 +54,17 @@ LUA_ROCK_BUILD_LOCK := $(LUA_ROCK_TREE)/.build.lock.d
 LUA_ROCKS ?= luarocks
 # Resolve optional LuaRocks state only for Lua targets.  Immediate $(shell ...)
 # expansion would make every C-only Make command depend on LuaRocks.
-LUA_HOST_INCLUDE_DIR = $(shell $(LUA_ROCKS) config variables.LUA_INCDIR 2>/dev/null)
-LUA_HOST_LIB_DIR = $(shell $(LUA_ROCKS) config variables.LUA_LIBDIR 2>/dev/null)
-LUA_HOST_INTERPRETER = $(shell $(LUA_ROCKS) config variables.LUA 2>/dev/null)
 LUA_STAGED_ROOT := build/lua-host
 LUA_STAGED_INCLUDE_DIR := $(LUA_STAGED_ROOT)/include
 LUA_STAGED_LIB_DIR := $(LUA_STAGED_ROOT)/lib
-LUA_STAGED_IDENTITY := $(LUA_STAGED_ROOT)/.luarocks-identity
 LUA_STAGED_LUA_DEPS := $(LUA_STAGED_ROOT)/.staged.stamp
 LUA_SDK_PREFIX := $(CURDIR)/build/lua-sdk
 LUA_SDK_INCLUDE_DIR := $(LUA_SDK_PREFIX)/include
 LUA_SDK_LIB_DIR := $(LUA_SDK_PREFIX)/lib
 LUA_SDK_STAMP := $(LUA_SDK_PREFIX)/.installed.stamp
 LUA_LOCAL_LIBDIR := $(LUA_SDK_LIB_DIR)
-LUA_ROCK_BUILD_BYPRODUCTS := \
-	$(CURDIR)/pslog \
-	$(CURDIR)/lua/src/pslog_lua.o
 LUA_ROCK_SOURCES := \
+	lua/scripts/build_local_rock.sh \
 	lua/lua-pslog.rockspec.in \
 	lua/scripts/check_binding_boundary.sh \
 	lua/scripts/render_release_rockspec.sh \
@@ -85,8 +79,8 @@ GO_PRODUCTION_DATASET_TOOL := bench/gen_go_production_dataset.c
 GO_CKVFMT_WRAPPERS := gobencher/benchmark/cpslog_kvfmt_generated.go
 HOST_GENERATED_VERSION_HEADER := $(CURDIR)/build/host/generated/include/pslog_version.h
 HOST_C_COMPILER = $(shell sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | head -n 1)
-HOST_CXX_COMPILER = $(shell cxx=$$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | head -n 1); if [ -n "$$cxx" ]; then printf '%s\n' "$$cxx"; else command -v c++ 2>/dev/null || true; fi)
-HOST_BINARY_RUNNER := $(CURDIR)/scripts/run_host_binary.sh
+HOST_CXX_COMPILER = $(shell cxx=$$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | head -n 1); override=$$(sed -n 's/^PSLOG_ALLOW_HOST_COMPILER:[^=]*=//p' build/host/CMakeCache.txt | tail -n 1); if [ -n "$$cxx" ]; then printf '%s\n' "$$cxx"; elif [ "$$(uname -s)" = Darwin ] || [ "$$override" = 1 ] || [ "$$override" = ON ] || [ "$$override" = TRUE ] || [ "$$override" = YES ]; then command -v c++ 2>/dev/null || true; fi)
+HOST_ELF_LINKER_FLAGS = $(shell sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' build/$(HOST_PRESET)/CMakeCache.txt 2>/dev/null | tail -n 1)
 
 BENCH_ITERS ?= 200000
 FUZZ_TIME ?= 30
@@ -127,6 +121,7 @@ RELEASE_TIMING_FILE := $(CURDIR)/build/release-timings.tsv
 	gobencher-tests \
 	prepare-gobencher-data \
 	perf-gate \
+	bench-freeze-baseline \
 	cross-build \
 	cross-test \
 	test-cross \
@@ -138,6 +133,7 @@ RELEASE_TIMING_FILE := $(CURDIR)/build/release-timings.tsv
 	package-verify \
 	verify-release-archives \
 	verify-release-privacy \
+	lifecycle-version-contract \
 	release-matrix \
 	finalize-slice \
 	release-pipeline \
@@ -156,17 +152,17 @@ RELEASE_TIMING_FILE := $(CURDIR)/build/release-timings.tsv
 help:
 	@printf '%s\n' \
 		'make build           Configure and build the debug preset.' \
-		'make deps-debug      Provision the pinned native Bootlin collection.' \
-		'make deps-release    Provision all pinned Linux release collections.' \
-		'make deps-cross      Provision the pinned non-host Linux collections.' \
+		'make deps-debug      Provision the pinned native Bootlin collection (normally automatic).' \
+		'make deps-release    Provision all pinned Linux release collections (normally automatic).' \
+		'make deps-cross      Provision the pinned non-host Linux collections (normally automatic).' \
 		'make build-debug     Alias for make build.' \
-		'make build-host      Configure and build the host-native local build.' \
+		'make build-host      Configure and build the local development build.' \
 		'make build-release   Configure and build the full shipped release build matrix.' \
 		'make format          Run clang-format on repo C/C header sources.' \
 		'make clangd          Check native debug sources with host clangd.' \
 		'make test            Run the debug C test suite.' \
 		'make test-debug      Alias for make test.' \
-		'make test-host       Build and run the host-native CTest suite.' \
+		'make test-host       Build and run the local CTest suite.' \
 		'make test-all        Run C tests, native hardening, Go gobencher tests, and the Go-vs-C perf gate.' \
 		'make valgrind        Run the native Valgrind memory-check gate.' \
 		'make coverage        Run the coverage preset and generate coverage-report.' \
@@ -181,7 +177,8 @@ help:
 		'make benchmarks      Alias for make benchmarks-all.' \
 		'make elevatorpitch   Run the live Go/C/Lua comparison chart.' \
 		'make gobencher-tests Run all Go gobencher tests.' \
-		'make perf-gate       Run the Go-vs-C performance gate.' \
+		'make perf-gate       Compare performance against this host’s baseline.' \
+		'make bench-freeze-baseline  Intentionally capture this host’s C/Lua baseline.' \
 		'make cross-build     Build all non-host cross release presets.' \
 		'make cross-test      Test all non-host cross release presets.' \
 		'make test-cross      Alias for make cross-test.' \
@@ -193,6 +190,7 @@ help:
 		'make package-verify  Run package archive and release privacy verification.' \
 		'make verify-release-archives Alias for make package-verify.' \
 		'make verify-release-privacy Run checksum-manifest privacy/relocatability gate.' \
+		'make lifecycle-version-contract Verify exact lightweight Git-tag version resolution.' \
 		'make release-matrix  Build/test/package the release target matrix.' \
 		'make finalize-slice  Run formatting and focused local verification.' \
 		'make prerelease      Run deterministic local pre-release checks.' \
@@ -208,7 +206,7 @@ help:
 		'make clean-dist      Remove dist/ release artifacts.'
 
 build:
-	cmake --preset $(DEBUG_PRESET)
+	./scripts/configure_cmake.sh --preset $(DEBUG_PRESET)
 	cmake --build --preset $(DEBUG_PRESET)
 
 deps-debug:
@@ -225,17 +223,17 @@ deps-cross:
 build-debug: build
 
 build-host:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build --preset $(HOST_PRESET)
 
 build-release:
 	@set -e; for preset in $(RELEASE_BUILD_PRESETS); do \
-		cmake --preset "$$preset"; \
+		./scripts/configure_cmake.sh --preset "$$preset"; \
 		cmake --build --preset "$$preset"; \
 	done
 
 format:
-	cmake --preset $(DEBUG_PRESET)
+	./scripts/configure_cmake.sh --preset $(DEBUG_PRESET)
 	cmake --build --preset format
 
 clangd: build
@@ -250,10 +248,13 @@ test-host: build-host
 	ctest --preset $(HOST_PRESET) --output-on-failure
 
 gobencher-tests: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test -exec "$(HOST_BINARY_RUNNER)" -a ./...
+	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" "$(CURDIR)/scripts/local-go.sh" test -a ./...
+
+bench-freeze-baseline: build-host lua-rock
+	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./bench/run_rebaseline.sh
 
 perf-gate: build-host lua-rock
-	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" PSLOG_HOST_EXECUTOR="$(HOST_BINARY_RUNNER)" ./bench/run_perf_gate.sh
+	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./bench/run_perf_gate.sh
 
 test-all:
 	$(TIMED) test $(MAKE) test
@@ -264,16 +265,13 @@ test-all:
 	$(TIMED) perf-gate $(MAKE) perf-gate
 
 valgrind:
-	cmake --preset $(VALGRIND_PRESET)
+	./scripts/configure_cmake.sh --preset $(VALGRIND_PRESET)
 	cmake --build --preset $(VALGRIND_PRESET)
-	@loader="$$(./scripts/run_sysroot_binary.sh --loader --build-dir ./build/$(VALGRIND_PRESET))"; \
-		sysroot="$$(sed -n 's/^CMAKE_SYSROOT:[^=]*=//p' ./build/$(VALGRIND_PRESET)/CMakeCache.txt | tail -n 1)"; \
-		valgrind --leak-check=full --track-origins=yes --error-exitcode=1 \
-			"$$loader" --library-path "$$sysroot/lib:$$sysroot/usr/lib:$$sysroot/lib64:$$sysroot/usr/lib64" \
-			./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
+	valgrind --leak-check=full --track-origins=yes --error-exitcode=1 \
+		./build/$(VALGRIND_PRESET)/pslog_valgrind_facade_tests
 
 coverage:
-	cmake --preset $(COVERAGE_PRESET)
+	./scripts/configure_cmake.sh --preset $(COVERAGE_PRESET)
 	cmake --build --preset $(COVERAGE_PRESET)
 	ctest --preset $(COVERAGE_PRESET) --output-on-failure
 	cmake --build --preset coverage-report
@@ -288,10 +286,10 @@ fuzz-long:
 	./scripts/fuzz.sh long $(FUZZ_LONG_TIME)
 
 benchmarks-c: build-host
-	"$(HOST_BINARY_RUNNER)" ./build/host/pslog_bench $(BENCH_ITERS) all
+	./build/host/pslog_bench $(BENCH_ITERS) all
 
 benchmarks-gobencher: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go test -exec "$(HOST_BINARY_RUNNER)" ./benchmark -run '^$$' -bench . -benchmem -count=$(GO_BENCH_COUNT)
+	cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" "$(CURDIR)/scripts/local-go.sh" test ./benchmark -run '^$$' -bench . -benchmem -count=$(GO_BENCH_COUNT)
 
 benchmarks-go: benchmarks-gobencher
 
@@ -304,11 +302,11 @@ bench: benchmarks
 bench-gate: perf-gate
 
 elevatorpitch: build-host lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
-	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run -exec "$(HOST_BINARY_RUNNER)" ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
+	eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && cd gobencher && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" "$(CURDIR)/scripts/local-go.sh" run ./cmd/elevatorpitch $(ELEVATORPITCH_ARGS)
 
 cross-build:
 	@set -e; for preset in $(CROSS_RELEASE_PRESETS); do \
-		cmake --preset "$$preset"; \
+		./scripts/configure_cmake.sh --preset "$$preset"; \
 		cmake --build --preset "$$preset"; \
 	done
 
@@ -320,7 +318,7 @@ cross-test: cross-build
 test-cross: cross-test
 
 package:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-clean-dist
 	cmake --build build/$(HOST_PRESET) --target package-archive
 	cmake --build build/$(HOST_PRESET) --target package-single-header
@@ -329,23 +327,23 @@ package:
 	cmake --build build/$(HOST_PRESET) --target package-checksums
 
 package-source:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-source
 
 package-source-smoke:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
 
 package-single-header:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-single-header
 
 package-checksums:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	cmake --build build/$(HOST_PRESET) --target package-checksums
 
 package-verify:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(package_archives_test|release_privacy_gate_test)$$' --output-on-failure
 	cmake -DPSLOG_ROOT=$(CURDIR) -DPSLOG_BINARY_DIR=$(CURDIR)/build/$(HOST_PRESET) -DPSLOG_VERSION=$(LUA_RELEASE_VERSION) -DPSLOG_TOOLCHAIN_RELATIVE=cmake/toolchains/linux-x86_64-gnu.cmake -P tests/source_archive_smoke_test.cmake
 	cmake --build build/$(HOST_PRESET) --target package-privacy-gate
@@ -353,14 +351,17 @@ package-verify:
 verify-release-archives: package-verify
 
 verify-release-privacy:
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	./scripts/verify_release_privacy.sh --build-dir build/$(HOST_PRESET) --target-id x86_64-linux-gnu
 
 release-matrix:
 	./scripts/run_linux_release_matrix.sh
 
+lifecycle-version-contract:
+	./scripts/lifecycle_version_contract.sh
+
 finalize-slice: format clangd build-host
-	cmake --preset $(HOST_PRESET)
+	./scripts/configure_cmake.sh --preset $(HOST_PRESET)
 	ctest --test-dir build/$(HOST_PRESET) -R '^(pslog_tests|pslog_single_header_tests|example_integration_test|public_symbol_visibility_test|darwin_linker_route_test)$$' --output-on-failure
 
 release-pipeline:
@@ -392,7 +393,7 @@ $(LUA_RELEASE_ROCKSPEC): $(LUA_ROCK_SOURCES) Makefile | $(LUA_DIST_DIR)
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_RELEASE_ROCKSPEC)"
 
 $(LUA_RELEASE_PACK_ROCKSPEC): Makefile $(LUA_RELEASE_STAGE_DIR)
-	cd "$(LUA_RELEASE_STAGE_DIR)" && ./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "../$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))" "file://$(LUA_RELEASE_PACK_SOURCE_TARBALL)" ""
+	cd "$(LUA_RELEASE_STAGE_DIR)" && ./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "../$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))" "file://$(notdir $(LUA_RELEASE_PACK_SOURCE_TARBALL))" ""
 
 $(LUA_RELEASE_SOURCE_TARBALL): $(LUA_RELEASE_STAGE_DIR) | $(LUA_DIST_DIR)
 	rm -f "$(LUA_RELEASE_PACK_SOURCE_TAR)" "$(LUA_RELEASE_PACK_SOURCE_TARBALL)"
@@ -401,21 +402,17 @@ $(LUA_RELEASE_SOURCE_TARBALL): $(LUA_RELEASE_STAGE_DIR) | $(LUA_DIST_DIR)
 	cp "$(LUA_RELEASE_PACK_SOURCE_TARBALL)" "$(LUA_RELEASE_SOURCE_TARBALL)"
 
 $(LUA_RELEASE_ROCK): $(LUA_RELEASE_PACK_ROCKSPEC) $(LUA_RELEASE_ROCKSPEC) $(LUA_RELEASE_SOURCE_TARBALL)
-	rm -f "$(LUA_RELEASE_ROCK)"
-	cd "$(LUA_RELEASE_PACK_DIR)" && "$(LUA_ROCKS)" pack "$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))"
+	cd "$(LUA_RELEASE_PACK_DIR)" && cmake -E tar cf "$(notdir $(LUA_RELEASE_ROCK))" --format=zip "$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))" "$(notdir $(LUA_RELEASE_PACK_SOURCE_TARBALL))"
+	@set -eu; verify_dir="$$(mktemp -d "$(CURDIR)/build/lua-rock-verify.XXXXXX")"; \
+	trap 'rm -rf "$$verify_dir"' EXIT; \
+	cd "$$verify_dir" && "$(LUA_ROCKS)" unpack "$(LUA_RELEASE_PACK_DIR)/$(notdir $(LUA_RELEASE_ROCK))"
 	mv "$(LUA_RELEASE_PACK_DIR)/$(notdir $(LUA_RELEASE_ROCK))" "$(LUA_RELEASE_ROCK)"
-	@tmp_dir="$$(mktemp -d)"; \
-	trap 'rm -rf "$$tmp_dir"' EXIT; \
-	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$$tmp_dir/$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))" "file://$(notdir $(LUA_RELEASE_PACK_SOURCE_TARBALL))" ""; \
-	cd "$$tmp_dir" && zip -q -u "$(LUA_RELEASE_ROCK)" "$(notdir $(LUA_RELEASE_PACK_ROCKSPEC))"
 	rm -rf "$(LUA_RELEASE_PACK_DIR)"
 
 lua-rock: $(LUA_ROCK_STAMP)
 
 lua-env:
 	@printf '%s\n' 'eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))"'
-	@printf '%s\n' 'export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}"'
-	@printf '%s\n' 'export DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"'
 
 prepare-gobencher-data: lua-rock $(GO_PRODUCTION_DATASET) $(GO_CKVFMT_WRAPPERS)
 
@@ -423,30 +420,10 @@ $(LUA_ROCKSPEC): $(LUA_ROCK_SOURCES)
 	mkdir -p "$(LUA_ROCK_TREE)"
 	./lua/scripts/render_release_rockspec.sh "$(LUA_RELEASE_VERSION)" "$(LUA_ROCKSPEC)" "git+file://$(CURDIR)"
 
-$(LUA_STAGED_IDENTITY): FORCE
-	@command -v "$(LUA_ROCKS)" >/dev/null 2>&1 || { echo 'LuaRocks for Lua 5.5 is required; install it or set LUA_ROCKS'; exit 1; }
-	@test -n "$(LUA_HOST_INTERPRETER)" || { echo 'Lua 5.5 interpreter is required through LuaRocks'; exit 1; }
-	@command -v "$(LUA_HOST_INTERPRETER)" >/dev/null 2>&1 || { echo "Lua 5.5 interpreter is unavailable: $(LUA_HOST_INTERPRETER)"; exit 1; }
-	@test -n "$(LUA_HOST_INCLUDE_DIR)" || { echo 'Lua 5.5 development headers are required through LuaRocks'; exit 1; }
-	@test -n "$(LUA_HOST_LIB_DIR)" || { echo 'Lua 5.5 development library is required through LuaRocks'; exit 1; }
-	test -f "$(LUA_HOST_INCLUDE_DIR)/lua.h" || { echo "missing Lua 5.5 header: $(LUA_HOST_INCLUDE_DIR)/lua.h"; exit 1; }
-	test -f "$(LUA_HOST_LIB_DIR)/liblua.a" || { echo "missing Lua 5.5 library: $(LUA_HOST_LIB_DIR)/liblua.a"; exit 1; }
-	@mkdir -p "$(LUA_STAGED_ROOT)"
-	@tmp="$@.tmp"; \
-	{ \
-		printf 'luarocks=%s\n' "$$(command -v "$(LUA_ROCKS)")"; \
-		printf 'lua=%s\n' "$$(command -v "$(LUA_HOST_INTERPRETER)")"; \
-		printf 'include=%s\n' "$(LUA_HOST_INCLUDE_DIR)"; \
-		printf 'lib=%s\n' "$(LUA_HOST_LIB_DIR)"; \
-		./scripts/sha256_files.sh "$(LUA_HOST_INCLUDE_DIR)/lua.h" "$(LUA_HOST_LIB_DIR)/liblua.a"; \
-	} >"$$tmp"; \
-	if test -f "$@" && cmp -s "$$tmp" "$@"; then rm -f "$$tmp"; else mv "$$tmp" "$@"; fi
-
-$(LUA_STAGED_LUA_DEPS): $(LUA_STAGED_IDENTITY)
-	rm -rf "$(LUA_STAGED_INCLUDE_DIR)" "$(LUA_STAGED_LIB_DIR)"
-	mkdir -p "$(LUA_STAGED_INCLUDE_DIR)" "$(LUA_STAGED_LIB_DIR)"
-	cp -a "$(LUA_HOST_INCLUDE_DIR)/." "$(LUA_STAGED_INCLUDE_DIR)/"
-	cp "$(LUA_HOST_LIB_DIR)/liblua.a" "$(LUA_STAGED_LIB_DIR)/"
+$(LUA_STAGED_LUA_DEPS): FORCE
+	./scripts/configure_cmake.sh --source cmake/lua --build build/lua-runtime --target host -- -DCMAKE_BUILD_TYPE=Release
+	cmake --build build/lua-runtime
+	cmake --install build/lua-runtime --prefix "$(CURDIR)/$(LUA_STAGED_ROOT)"
 	touch "$@"
 
 $(LUA_SDK_STAMP): build-host
@@ -458,25 +435,27 @@ $(LUA_SDK_STAMP): build-host
 	touch "$@"
 
 $(LUA_ROCK_STAMP): $(LUA_ROCKSPEC) $(LUA_ROCK_SOURCES) $(LUA_STAGED_LUA_DEPS) $(LUA_SDK_STAMP)
-	./scripts/with_lock.sh "$(LUA_ROCK_BUILD_LOCK)" env CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" bash -lc 'set -e; "$(LUA_ROCKS)" make --tree "$(LUA_ROCK_TREE)" "$(LUA_ROCKSPEC)" LUA_INCDIR="$(CURDIR)/$(LUA_STAGED_INCLUDE_DIR)" LIBPSLOG_INCDIR="$(LUA_SDK_INCLUDE_DIR)" LIBPSLOG_LIBDIR="$(LUA_SDK_LIB_DIR)"; rm -rf $(LUA_ROCK_BUILD_BYPRODUCTS); touch "$(LUA_ROCK_STAMP)"'
+	./scripts/with_lock.sh "$(LUA_ROCK_BUILD_LOCK)" bash lua/scripts/build_local_rock.sh "$(LUA_ROCKS)" "$(CURDIR)/$(LUA_ROCKSPEC)" "$(CURDIR)/$(LUA_ROCK_TREE)" "$(HOST_C_COMPILER)"
+	touch "$(LUA_ROCK_STAMP)"
 
 lua-test: lua-rock
-	LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}" ./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
+	./lua/scripts/check_binding_boundary.sh "$(LUA_ROCK_TREE)"
 	CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" ./lua/scripts/run_interop_embedder_test.sh "$(CURDIR)/build/$(HOST_PRESET)" "$(LUA_RELEASE_VERSION)" "$(LUA_ROCK_TREE)" "$(LUA_SDK_PREFIX)"
-	export LD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${LD_LIBRARY_PATH:-}" DYLD_LIBRARY_PATH="$(LUA_LOCAL_LIBDIR):$${DYLD_LIBRARY_PATH:-}"; eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && "$(LUA_HOST_INTERPRETER)" lua/tests/test_pslog.lua
+	eval "$$($(LUA_ROCKS) path --tree $(LUA_ROCK_TREE))" && "$(CURDIR)/build/lua-runtime/pslog_lua" lua/tests/test_pslog.lua
 
 $(GO_PRODUCTION_DATASET): $(HOST_GENERATED_VERSION_HEADER) $(GO_PRODUCTION_DATASET_TOOL) $(GO_PRODUCTION_DATASET_SOURCE)
-	@tmp_bin="$$(mktemp "$(CURDIR)/.gen_go_production_dataset.XXXXXX")"; tmp_output="$$(mktemp "$(CURDIR)/.gen_go_production_dataset_output.XXXXXX")"; \
+	@set -eu; tmp_bin="$$(mktemp "$(CURDIR)/build/.gen_go_production_dataset.XXXXXX")"; tmp_output="$$(mktemp "$(CURDIR)/build/.gen_go_production_dataset_output.XXXXXX")"; \
 	trap 'rm -f "$$tmp_bin" "$$tmp_output"' EXIT; \
 	rm -f "$$tmp_bin"; \
-	"$(HOST_C_COMPILER)" -std=c99 -O2 -I"$(CURDIR)" -I"$(CURDIR)/include" -I"$(CURDIR)/build/host/generated/include" "$(GO_PRODUCTION_DATASET_TOOL)" "$(GO_PRODUCTION_DATASET_SOURCE)" -o "$$tmp_bin"; \
-	"$(HOST_BINARY_RUNNER)" "$$tmp_bin" >"$$tmp_output"; \
+		"$(HOST_C_COMPILER)" -std=c99 -O2 -I"$(CURDIR)" -I"$(CURDIR)/include" -I"$(CURDIR)/build/host/generated/include" "$(GO_PRODUCTION_DATASET_TOOL)" "$(GO_PRODUCTION_DATASET_SOURCE)" $(foreach flag,$(HOST_ELF_LINKER_FLAGS),'$(flag)') -o "$$tmp_bin"; \
+		"$$tmp_bin" >"$$tmp_output"; \
 	mv "$$tmp_output" "$(GO_PRODUCTION_DATASET)"
 
 $(GO_CKVFMT_WRAPPERS): $(GO_PRODUCTION_DATASET) $(LUA_SDK_STAMP) gobencher/cmd/gen_ckvfmt_wrappers/main.go gobencher/benchmark/cpslog_kvfmt.go
-	cd gobencher/benchmark && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" go run ../cmd/gen_ckvfmt_wrappers
+	cd gobencher/benchmark && CC="$(HOST_C_COMPILER)" CXX="$(HOST_CXX_COMPILER)" "$(CURDIR)/scripts/local-go.sh" run ../cmd/gen_ckvfmt_wrappers
 
 release:
+	PKT_TIMING_FILE="$(RELEASE_TIMING_FILE)" $(TIMED) lifecycle-version-contract $(MAKE) lifecycle-version-contract
 	PKT_TIMING_FILE="$(RELEASE_TIMING_FILE)" $(TIMED) release-clean $(MAKE) clean
 	PKT_TIMING_FILE="$(RELEASE_TIMING_FILE)" $(TIMED) release-pipeline $(MAKE) release-pipeline
 	@printf 'Release timings: %s\n' "$(RELEASE_TIMING_FILE)"

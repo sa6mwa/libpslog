@@ -22,9 +22,6 @@ endif()
 if(NOT DEFINED PSLOG_CROSSCOMPILING_EMULATOR)
     set(PSLOG_CROSSCOMPILING_EMULATOR "")
 endif()
-if(NOT DEFINED PSLOG_TEST_EXECUTOR)
-    set(PSLOG_TEST_EXECUTOR "")
-endif()
 
 set(test_root "${PSLOG_BINARY_DIR}/example-integration-test")
 set(example_source "${PSLOG_ROOT}/examples/example.c")
@@ -34,11 +31,11 @@ set(single_header_binary "${test_root}/example-single-header")
 file(REMOVE_RECURSE "${test_root}")
 file(MAKE_DIRECTORY "${test_root}")
 
-string(REPLACE "|" ";" example_run_command "${PSLOG_TEST_EXECUTOR}")
-if(NOT example_run_command AND PSLOG_CROSSCOMPILING)
+if(PSLOG_CROSSCOMPILING AND NOT PSLOG_NATIVE_EXECUTION)
     string(REPLACE "|" ";" pslog_cross_emulator "${PSLOG_CROSSCOMPILING_EMULATOR}")
     list(LENGTH pslog_cross_emulator pslog_cross_emulator_len)
     if(pslog_cross_emulator_len EQUAL 0)
+        set(skip_execution TRUE)
         message(STATUS "Skipping example execution for cross build without emulator")
     else()
         set(example_run_command ${pslog_cross_emulator})
@@ -83,7 +80,9 @@ if(NOT library_compile_result EQUAL 0)
 endif()
 
 list(LENGTH example_run_command example_run_command_len)
-if(example_run_command_len EQUAL 0)
+if(skip_execution)
+    # Build-only foreign target; never attempt execution on the host.
+elseif(example_run_command_len EQUAL 0)
     execute_process(
         COMMAND "${library_binary}"
         RESULT_VARIABLE library_run_result
@@ -125,7 +124,9 @@ if(NOT single_header_compile_result EQUAL 0)
         "stderr:\n${single_header_compile_stderr}")
 endif()
 
-if(example_run_command_len EQUAL 0)
+if(skip_execution)
+    # Build-only foreign target; never attempt execution on the host.
+elseif(example_run_command_len EQUAL 0)
     execute_process(
         COMMAND "${single_header_binary}"
         RESULT_VARIABLE single_header_run_result

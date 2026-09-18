@@ -9,8 +9,8 @@ file(READ "${PSLOG_ROOT}/Makefile" makefile)
 if(NOT makefile MATCHES "prerelease: release-pipeline")
     message(FATAL_ERROR "prerelease does not invoke the shared release-pipeline")
 endif()
-if(NOT makefile MATCHES "release:\n[ \t]*PKT_TIMING_FILE=.*release-clean \\$\\(MAKE\\) clean\n[ \t]*PKT_TIMING_FILE=.*release-pipeline \\$\\(MAKE\\) release-pipeline")
-    message(FATAL_ERROR "release must clean before invoking the shared release-pipeline")
+if(NOT makefile MATCHES "release:\n[ \t]*PKT_TIMING_FILE=.*lifecycle-version-contract \\$\\(MAKE\\) lifecycle-version-contract\n[ \t]*PKT_TIMING_FILE=.*release-clean \\$\\(MAKE\\) clean\n[ \t]*PKT_TIMING_FILE=.*release-pipeline \\$\\(MAKE\\) release-pipeline")
+    message(FATAL_ERROR "release must verify the version contract before cleaning and invoking the shared release-pipeline")
 endif()
 
 string(FIND "${makefile}" "release-pipeline:" pipeline_offset)
@@ -37,22 +37,14 @@ if(NOT makefile MATCHES "test-all:\n[ \t]*\\$\\(TIMED\\) test \\$\\(MAKE\\) test
    NOT makefile MATCHES "\\$\\(TIMED\\) perf-gate \\$\\(MAKE\\) perf-gate")
     message(FATAL_ERROR "test-all must expose its serial release timing phases")
 endif()
-if(NOT makefile MATCHES "HOST_BINARY_RUNNER := \\$\\(CURDIR\\)/scripts/run_host_binary\\.sh" OR
-   NOT makefile MATCHES "go test -exec \"\\$\\(HOST_BINARY_RUNNER\\)\"" OR
-   NOT makefile MATCHES "PSLOG_HOST_EXECUTOR=\"\\$\\(HOST_BINARY_RUNNER\\)\"")
-    message(FATAL_ERROR "Bootlin-linked Go and performance gates must run through the configured host sysroot runner")
+if(makefile MATCHES "run_host_binary\\.sh" OR
+   makefile MATCHES "go test -exec" OR
+   makefile MATCHES "PSLOG_HOST_EXECUTOR")
+    message(FATAL_ERROR "Go host tools must execute normally; only project ELF executables select Bootlin at link time")
 endif()
-if(NOT makefile MATCHES "LUA_HOST_INTERPRETER = \\$\\(shell \\$\\(LUA_ROCKS\\) config variables\\.LUA" OR
-   NOT makefile MATCHES "LUA_STAGED_IDENTITY := \\$\\(LUA_STAGED_ROOT\\)/\\.luarocks-identity" OR
-   NOT makefile MATCHES "\\$\\(LUA_STAGED_LUA_DEPS\\): \\$\\(LUA_STAGED_IDENTITY\\)" OR
-   NOT makefile MATCHES "\\./scripts/sha256_files\\.sh \"\\$\\(LUA_HOST_INCLUDE_DIR\\)/lua\\.h\" \"\\$\\(LUA_HOST_LIB_DIR\\)/liblua\\.a\"" OR
-   NOT makefile MATCHES "\\./scripts/with_lock\\.sh \"\\$\\(LUA_ROCK_BUILD_LOCK\\)\" env CC=" OR
-   NOT makefile MATCHES "\\\"\\$\\(LUA_HOST_INTERPRETER\\)\\\" lua/tests/test_pslog\\.lua")
-    message(FATAL_ERROR "Lua gates must track the selected LuaRocks ABI inputs and run with the selected Lua interpreter")
-endif()
-if(makefile MATCHES "(^|\n)[^\n]*flock \"\\$\\(LUA_ROCK_BUILD_LOCK\\)\"" OR
-   makefile MATCHES "(^|\n)[^\n]*sha256sum \"\\$\\(LUA_HOST_INCLUDE_DIR\\)/lua\\.h\"")
-    message(FATAL_ERROR "Lua gates must avoid GNU/Linux-only flock and sha256sum commands")
+if(makefile MATCHES "export (LD_LIBRARY_PATH|DYLD_LIBRARY_PATH)" OR
+   NOT makefile MATCHES "build/lua-runtime/pslog_lua")
+    message(FATAL_ERROR "Lua module tests require the local interpreter without runtime environment injection")
 endif()
 file(READ "${PSLOG_ROOT}/scripts/verify_release_privacy.sh" privacy_gate)
 if(NOT privacy_gate MATCHES "scripts/sha256_files\\.sh\" --check" OR
@@ -64,8 +56,8 @@ if(NOT package_archives_test MATCHES "scripts/sha256_files\\.sh\" --check" OR
    package_archives_test MATCHES "(^|\n)[^\n]*sha256sum -c")
     message(FATAL_ERROR "package archive checksum verification must use the portable checksum helper")
 endif()
-if(NOT makefile MATCHES "loader=\\\"\\$\\$\\(\\./scripts/run_sysroot_binary\\.sh --loader --build-dir" OR
-   NOT makefile MATCHES "valgrind --leak-check=full --track-origins=yes --error-exitcode=1" OR
-   NOT makefile MATCHES "\\\"\\$\\$loader\\\" --library-path")
-    message(FATAL_ERROR "Valgrind must run the selected Bootlin facade process directly through its sysroot loader")
+if(NOT makefile MATCHES "valgrind --leak-check=full --track-origins=yes --error-exitcode=1" OR
+   makefile MATCHES "run_sysroot_binary\\.sh" OR
+   makefile MATCHES "--library-path")
+    message(FATAL_ERROR "Valgrind must execute the ELF-pinned Bootlin facade process directly")
 endif()

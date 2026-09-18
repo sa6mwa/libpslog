@@ -7,9 +7,9 @@
       "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/host.cmake",
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "PSLOG_DEPENDENCY_MODE": "bundled-sdk",
         "PSLOG_BUILD_TESTS": "ON",
         "PSLOG_BUILD_BENCHMARKS": "ON",
         "PSLOG_BUILD_LUA": "OFF",

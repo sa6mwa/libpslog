@@ -76,12 +76,19 @@ log->destroy(log);
 Derived logger path:
 
 ```c
+pslog_config config;
 pslog_field base[1];
+pslog_logger *log;
 pslog_logger *child;
 pslog_logger *next;
 
+pslog_default_config(&config);
+config.output = pslog_output_from_fp(stdout, 0);
+log = pslog_new(&config);
+
 base[0] = pslog_str("subsystem", "worker");
 child = log->with(log, base, 1u);
+log->destroy(log);
 next = child->with_level_field(child);
 child->destroy(child);
 child = next;
@@ -156,11 +163,12 @@ The main example is [examples/example.c](examples/example.c). It demonstrates:
 Build it in normal library mode:
 
 ```sh
-cmake --preset host
+./scripts/configure_cmake.sh --preset host
 cmake --build --preset host
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -I../build/host/generated/include -I../include \
-  -o example example.c ../build/host/libpslog.a -pthread
+  -o example example.c ../build/host/libpslog.a -pthread \
+  $(sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' ../build/host/CMakeCache.txt)
 ./example
 ```
 
@@ -185,12 +193,13 @@ when a static link is preferred.
 Build the same example in single-header mode:
 
 ```sh
-cmake --preset host
+./scripts/configure_cmake.sh --preset host
 cmake --build ../build/host --target package-single-header
 cd examples
 "$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' ../build/host/CMakeCache.txt)" -DPSLOG_EXAMPLE_SINGLE_HEADER=1 \
   -I../build/host/generated/include \
-  -o example example.c -pthread
+  -o example example.c -pthread \
+  $(sed -n 's/^PSLOG_NONSHIPPED_ELF_LINKER_FLAGS:STRING=//p' ../build/host/CMakeCache.txt)
 ./example
 ```
 
@@ -246,20 +255,23 @@ make lua-rock
 make lua-test
 ```
 
-`make lua-rock` first installs the Bootlin-built public C SDK into the
+`make lua-rock` first installs the selected-compiler public C SDK into the
 repo-local `build/lua-sdk/` prefix. The Lua module, C interop checks, and Go
 Lua benchmark bridge all consume that installed SDK rather than source-tree
-headers or libraries.
+headers or libraries. Lua 5.5.1 is built from a checksum-pinned source archive
+with the selected compiler; its headers and static library are staged in
+`build/lua-host/`, and `build/lua-runtime/pslog_lua` loads local modules with
+the selected runtime. LuaRocks remains a host tool.
 
 Run the Lua examples from the repository root:
 
 ```sh
 make lua-rock
 eval "$(make lua-env)"
-lua lua/examples/example.lua
-lua lua/examples/basic.lua
-lua lua/examples/from_env.lua
-lua lua/examples/callback.lua
+build/lua-runtime/pslog_lua lua/examples/example.lua
+build/lua-runtime/pslog_lua lua/examples/basic.lua
+build/lua-runtime/pslog_lua lua/examples/from_env.lua
+build/lua-runtime/pslog_lua lua/examples/callback.lua
 ```
 
 Example entry points live under [`lua/examples/`](lua/examples/):
@@ -300,7 +312,7 @@ Run `make help` for the full target list.
 Standard debug build:
 
 ```sh
-cmake --preset debug
+./scripts/configure_cmake.sh --preset debug
 cmake --build --preset debug
 ctest --preset debug
 ```
@@ -327,7 +339,10 @@ make release-matrix
 
 `make prerelease` runs the shared deterministic proof graph without cleaning
 generated state first. `make release` cleans first and then runs that exact
-same proof graph; it is the final local release gate.
+same proof graph; it is the final local release gate. Before cleaning, it
+verifies that Make and CMake agree on the exact lightweight Git-tag version
+contract. Untagged candidate rehearsals use `0.0.0`; final artifacts require
+the lightweight `vX.Y.Z` tag on `HEAD`.
 `make prerelease-hardening` adds the explicit long AFL++ fuzz tier to that
 proof graph. `make release` writes a tab-separated phase timing report to
 `build/release-timings.tsv`; its matrix entries distinguish configure, build,
@@ -343,7 +358,7 @@ column -t -s $'\t' build/release-timings.tsv
 
 That script runs, for every shipped Linux target:
 
-- `cmake --preset ...`
+- `scripts/configure_cmake.sh --preset ...`
 - `cmake --build --preset ...`
 - `ctest --preset ...`
 - runtime package generation
@@ -357,9 +372,11 @@ and packages `arm64-apple-darwin`.
 
 Toolchain expectations:
 
-- Release, cross, Valgrind, and fuzz presets provision checksum-pinned Bootlin GCC collections through `scripts/cpkt-toolchains.sh`; host-native `debug` and `host` presets use the local development compiler selected by CMake.
-- Bootlin-backed native x86_64 Valgrind and AFL++ execution launch through the selected Bootlin sysroot loader, so they do not depend on a matching host glibc or musl installation. Native memory checking still uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection. Host benchmark and Go/Lua comparison gates use `scripts/run_host_binary.sh`, which runs native host binaries directly and sysroot-backed host binaries through the configured loader.
+- Every Linux configure path provisions a checksum-pinned Bootlin stable-2026.08-1 GCC collection through `scripts/cpkt-toolchains.sh`. The published Bootlin compiler executables require an x86-64 Linux host, so native Linux ARM development hosts are unsupported by default. `PSLOG_ALLOW_HOST_COMPILER=1` is an explicit developer-only escape hatch for host-target presets on any OS or architecture; it leaves compiler selection to CMake and disables the private Bootlin runtime. It does not alter explicit cross or release target presets. User-facing Make targets and standalone benchmark, fuzz, and release-matrix scripts use `scripts/configure_cmake.sh`, which removes stale compiler state before configuring. On macOS, the local development presets leave compiler selection to the host, while the Darwin release preset uses its configured osxcross collection.
+- The override applies to its complete host workflow, including CTest, package-consumer verification, Go and Lua consumers, and coverage. Invoke it for each command, for example `PSLOG_ALLOW_HOST_COMPILER=1 make test` or `PSLOG_ALLOW_HOST_COMPILER=1 make coverage`. Coverage resolves `gcov` from the selected host compiler.
+- Unless `PSLOG_ALLOW_HOST_COMPILER=1` is active, every non-shipped native Linux executable pins the selected Bootlin ELF interpreter and a private DT_RPATH at link time, so CTest, Valgrind, examples, benchmarks, fuzzing, and generated local consumers run directly with the selected runtime. Native memory checking still uses host Valgrind against a focused Bootlin-built facade test; native x86_64 fuzzing uses the cached AFL++ GCC-plugin wrapper from `scripts/cpkt-aflpp.sh`, which delegates to the same Bootlin collection. Cross-target tests continue to use QEMU with their matching sysroot.
 - `clang-format` and `clangd` are host development tools only. `make clangd` checks the native public C consumer with `build/debug/compile_commands.json`, including its public-header surface. Public declarations use Doxygen comments so hover documentation remains useful in clangd. clangd is not a compiler, target-ABI verifier, package check, or release dependency; cross builds, packages, and releases do not invoke it.
+- Release privacy verification inspects every ELF payload by magic, including extensionless files and nested archives. It rejects private interpreters, bundled libc loaders, absolute dependency paths, and every non-relative runtime search-path entry; missing inspection tools fail the gate. Local runtime flags never enter installed SDK metadata.
 - The shared toolchain cache is `${CPKT_TOOLCHAIN_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/toolchains}`. Its Bootlin and AFL++ provisioners serialize each collection with a bounded `CPKT_TOOLCHAIN_LOCK_TIMEOUT` (600 seconds by default), and the AFL++ cache identity includes the selected Bootlin collection and sysroot. External dependency archives use `${CPKT_DEPENDENCY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/c.pkt.systems/deps}`. Both survive `make clean`; disposable extracted dependency source state is kept under the active CMake build tree.
 - Cross test execution requires `qemu-aarch64` and `qemu-arm`; each uses the matching Bootlin sysroot.
 - `arm64-apple-darwin` expects osxcross under `OSXCROSS_ROOT` or `$HOME/.local/cross/osxcross`.
@@ -367,7 +384,7 @@ Toolchain expectations:
 Single-target examples:
 
 ```sh
-cmake --preset aarch64-linux-gnu-release
+./scripts/configure_cmake.sh --preset aarch64-linux-gnu-release
 cmake --build --preset aarch64-linux-gnu-release
 ctest --preset aarch64-linux-gnu-release
 
@@ -392,8 +409,13 @@ Useful commands:
 
 ```sh
 make benchmarks-c
-./bench/run_rebaseline.sh
+make perf-gate
+make bench-freeze-baseline
 ```
+
+`make perf-gate` compares the fastest result from five pinned C samples for
+each metric with this host's baseline. Set `PSLOG_PERF_C_SAMPLES` to change the
+sample count when measuring on a controlled machine.
 
 The benchmark suite covers:
 

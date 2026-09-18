@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$1
-fixture_root=$(mktemp -d)
+fixture_root=$(mktemp -d "$repo_root/build/fuzz-gate-test.XXXXXX")
 cleanup() { rm -rf "$fixture_root"; }
 trap cleanup EXIT HUP INT TERM
 
@@ -10,9 +10,6 @@ source "$repo_root/scripts/fuzz.sh"
 repo_root=$fixture_root
 mkdir -p "$repo_root/scripts" "$repo_root/fuzz/corpus" "$repo_root/build/fuzz"
 touch "$repo_root/fuzz/corpus/seed"
-mkdir -p "$repo_root/sysroot/lib"
-touch "$repo_root/sysroot/lib/ld-linux-x86-64.so.2"
-chmod +x "$repo_root/sysroot/lib/ld-linux-x86-64.so.2"
 
 cmake() { :; }
 
@@ -24,24 +21,17 @@ make_fake_fuzzer() {
     '  if [[ "$1" == "-o" ]]; then output=$2; shift 2; continue; fi' \
     '  shift' \
     'done' \
+    'if [[ -n "${PSLOG_AFL_AFFINITY:-}" ]]; then printf "%s\\n" "${AFL_NO_AFFINITY:-}" > "$PSLOG_AFL_AFFINITY"; fi' \
     'mkdir -p "$output/default/crashes" "$output/default/hangs"' \
+    'printf "execs_done : 1\n" > "$output/default/fuzzer_stats"' \
     "${mode}" >"$repo_root/fake-afl-fuzz"
   chmod +x "$repo_root/fake-afl-fuzz"
 }
 
 printf '%s\n' '#!/usr/bin/env bash' 'printf "afl_fuzz=%s\\n" "$(dirname "$0")/../fake-afl-fuzz"' \
   >"$repo_root/scripts/cpkt-aflpp.sh"
-chmod +x "$repo_root/scripts/cpkt-aflpp.sh"
-
-printf '%s\n' '#!/usr/bin/env bash' 'printf "sysroot=%s\\n" "$(dirname "$0")/../sysroot"' \
-  >"$repo_root/scripts/cpkt-toolchains.sh"
-chmod +x "$repo_root/scripts/cpkt-toolchains.sh"
-
-printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
-  '[[ "$1" == "--loader" ]] || exit 2' \
-  'printf "%s\\n" "'"$repo_root"'/sysroot/lib/ld-linux-x86-64.so.2"' \
-  >"$repo_root/scripts/run_sysroot_binary.sh"
-chmod +x "$repo_root/scripts/run_sysroot_binary.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$repo_root/scripts/configure_cmake.sh"
+chmod +x "$repo_root/scripts/cpkt-aflpp.sh" "$repo_root/scripts/configure_cmake.sh"
 
 make_fake_fuzzer 'touch "$output/default/crashes/id:000000,sig:06"'
 if main smoke 1; then
@@ -50,4 +40,20 @@ if main smoke 1; then
 fi
 
 make_fake_fuzzer ':'
-main smoke 1
+PSLOG_AFL_AFFINITY="$fixture_root/affinity" main smoke 1
+[[ "$(cat "$fixture_root/affinity")" == 1 ]] || {
+  printf 'fuzz gate did not disable AFL++ core affinity checks\n' >&2
+  exit 1
+}
+
+make_fake_fuzzer 'printf "execs_done : 0\n" > "$output/default/fuzzer_stats"'
+if main smoke 1; then
+  printf 'fuzz gate accepted zero executions\n' >&2
+  exit 1
+fi
+
+make_fake_fuzzer 'rm "$output/default/fuzzer_stats"'
+if main smoke 1; then
+  printf 'fuzz gate accepted missing execution statistics\n' >&2
+  exit 1
+fi

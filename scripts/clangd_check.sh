@@ -7,9 +7,10 @@ database_dir="$repo_root/build/debug"
 # clangd's --check mode exercises code actions as well as diagnostics.  The
 # core implementation intentionally offers enough refactoring opportunities
 # for some clangd releases to report failed *optional* actions as errors.
-# Check the native public-consumer translation unit instead: it uses the
-# native Debug compile database and verifies editor parsing of the installed
-# public C surface without treating unavailable refactorings as source errors.
+# Check the main example public-consumer translation unit instead: it uses the
+# native Debug compile database and verifies editor parsing, including Doxygen
+# comments in the installed public C surface, without treating unavailable
+# refactorings as source errors.
 source_file="$repo_root/examples/example.c"
 
 command -v clangd >/dev/null 2>&1 || {
